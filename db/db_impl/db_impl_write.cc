@@ -1783,6 +1783,7 @@ Status DB::Put(const WriteOptions& opt, ColumnFamilyHandle* column_family,
     // 8 bytes are taken by header, 4 bytes for count, 1 byte for type,
     // and we allocate 11 extra bytes for key length, as well as value length.
     WriteBatch batch(key.size() + value.size() + 24);
+    //放到batch里面
     Status s = batch.Put(column_family, key, value);
     if (!s.ok()) {
       return s;

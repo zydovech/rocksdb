@@ -220,6 +220,7 @@ void WriteThread::SetState(Writer* w, uint8_t new_state) {
   }
 }
 
+//这个函数主要用来讲当前的Writer对象加入到group中
 bool WriteThread::LinkOne(Writer* w, std::atomic<Writer*>* newest_writer) {
   assert(newest_writer != nullptr);
   assert(w->state == STATE_INIT);
@@ -228,7 +229,7 @@ bool WriteThread::LinkOne(Writer* w, std::atomic<Writer*>* newest_writer) {
     // If write stall in effect, and w->no_slowdown is not true,
     // block here until stall is cleared. If its true, then return
     // immediately
-    if (writers == &write_stall_dummy_) {
+    if (writers == &write_stall_dummy_) {//先不管
       if (w->no_slowdown) {
         w->status = Status::Incomplete("Write stall");
         SetState(w, STATE_COMPLETED);
@@ -249,7 +250,7 @@ bool WriteThread::LinkOne(Writer* w, std::atomic<Writer*>* newest_writer) {
     }
     w->link_older = writers;
     if (newest_writer->compare_exchange_weak(writers, w)) {
-      return (writers == nullptr);
+      return (writers == nullptr); //之前的是null的话，则代表新写入的是leader
     }
   }
 }
@@ -382,7 +383,7 @@ void WriteThread::JoinBatchGroup(Writer* w) {
 
   TEST_SYNC_POINT_CALLBACK("WriteThread::JoinBatchGroup:Wait", w);
 
-  if (!linked_as_leader) {
+  if (!linked_as_leader) { //是leader的话，就直接返回了
     /**
      * Wait util:
      * 1) An existing leader pick us as the new leader when it finishes

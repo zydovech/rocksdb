@@ -118,7 +118,7 @@ class SkipList {
   const uint32_t kScaledInverseBranching_;
 
   // Immutable after construction
-  Comparator const compare_;
+  Comparator const compare_; //比较器
   Allocator* const allocator_;    // Allocator used for allocations of nodes
 
   Node* const head_;

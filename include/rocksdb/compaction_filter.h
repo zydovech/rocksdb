@@ -35,15 +35,15 @@ struct CompactionFilterContext {
 class CompactionFilter {
  public:
   enum ValueType {
-    kValue,
-    kMergeOperand,
+    kValue, //针对value操作，
+    kMergeOperand,//针对merge操作
     kBlobIndex,  // used internally by BlobDB.
   };
 
   enum class Decision {
-    kKeep,
-    kRemove,
-    kChangeValue,
+    kKeep, //保留k
+    kRemove, //删除
+    kChangeValue, //修改value的值
     kRemoveAndSkipUntil,
   };
 
@@ -62,8 +62,8 @@ class CompactionFilter {
 
   virtual ~CompactionFilter() {}
 
-  // The compaction process invokes this
-  // method for kv that is being compacted. A return value
+  // The compaction process invokes this 1。kv正在被compacted的过程中会调用这个过程
+  // method for kv that is being compacted. A return value  2. 如果返回false，则应该保留，如果返回true,则应该被删除
   // of false indicates that the kv should be preserved in the
   // output of this compaction run and a return value of true
   // indicates that this key-value should be removed from the
@@ -78,18 +78,19 @@ class CompactionFilter {
   // When the value is to be preserved, the application has the option
   // to modify the existing_value and pass it back through new_value.
   // value_changed needs to be set to true in this case.
-  //
+  // 如果value选择被保留，则应用程序可以选择修改现有的值，通过设置new_value，如果修改的话，则value_changed应该被置位true
   // Note that RocksDB snapshots (i.e. call GetSnapshot() API on a
   // DB* object) will not guarantee to preserve the state of the DB with
   // CompactionFilter. Data seen from a snapshot might disppear after a
   // compaction finishes. If you use snapshots, think twice about whether you
   // want to use compaction filter and whether you are using it in a safe way.
-  //
+  // 快照不能阻止数据被删除
   // If multithreaded compaction is being used *and* a single CompactionFilter
   // instance was supplied via Options::compaction_filter, this method may be
   // called from different threads concurrently.  The application must ensure
   // that the call is thread-safe.
-  //
+  // 如果有多个线程进行compaction 但是只通过Options::compaction_filter设置了一个CompactionFilter，则需要保证多线程安全
+  // 如果CompactionFilter是通过factory 创建的，则不需要保证，每个线程单独一个
   // If the CompactionFilter was created by a factory, then it will only ever
   // be used by a single thread that is doing the compaction run, and this
   // call does not need to be thread-safe.  However, multiple filters may be

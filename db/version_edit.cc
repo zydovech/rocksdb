@@ -161,7 +161,7 @@ void VersionEdit::Clear() {
   is_in_atomic_group_ = false;
   remaining_entries_ = 0;
 }
-
+//写入到manifest文件的内容就是在这里
 bool VersionEdit::EncodeTo(std::string* dst) const {
   if (has_db_id_) {
     PutVarint32(dst, kDbId);

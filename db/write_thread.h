@@ -367,7 +367,7 @@ class WriteThread {
 
   // Points to the newest pending writer. Only leader can remove
   // elements, adding can be done lock-free by anybody.
-  std::atomic<Writer*> newest_writer_;
+  std::atomic<Writer*> newest_writer_; //保存的是最新的写入对象
 
   // Points to the newest pending memtable writer. Used only when pipelined
   // write is enabled.

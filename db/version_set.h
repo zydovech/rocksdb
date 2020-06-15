@@ -1127,7 +1127,7 @@ class VersionSet {
   // and is qualified for being deleted in 2PC mode. In non-2PC mode, this
   // number is ignored.
   std::atomic<uint64_t> min_log_number_to_keep_2pc_ = {0};
-  uint64_t manifest_file_number_;
+  uint64_t manifest_file_number_; //就会说manifest文件名后面的序号，比如MANIFEST-000159,就是000159
   uint64_t options_file_number_;
   uint64_t pending_manifest_file_number_;
   // The last seq visible to reads. It normally indicates the last sequence in

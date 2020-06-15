@@ -520,8 +520,8 @@ class ColumnFamilyData {
 
   std::vector<std::string> GetDbPaths() const;
 
-  uint32_t id_;
-  const std::string name_;
+  uint32_t id_; //当前column_family的id
+  const std::string name_;//当前column的name
   Version* dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;         // == dummy_versions->prev_
 
@@ -691,10 +691,10 @@ class ColumnFamilySet {
   // * when reading, at least one condition needs to be satisfied:
   // 1. DB mutex locked
   // 2. accessed from a single-threaded write thread
-  std::unordered_map<std::string, uint32_t> column_families_;
-  std::unordered_map<uint32_t, ColumnFamilyData*> column_family_data_;
+  std::unordered_map<std::string, uint32_t> column_families_; //名字到Id 的映射
+  std::unordered_map<uint32_t, ColumnFamilyData*> column_family_data_; //id到 ColumnFamilyData的映射
 
-  uint32_t max_column_family_;
+  uint32_t max_column_family_; //记录了当前最大的column_family的id,每次新增的时候，这个值都会递增
   ColumnFamilyData* dummy_cfd_;
   // We don't hold the refcount here, since default column family always exists
   // We are also not responsible for cleaning up default_cfd_cache_. This is
@@ -749,8 +749,8 @@ class ColumnFamilyMemTablesImpl : public ColumnFamilyMemTables {
   virtual ColumnFamilyData* current() override { return current_; }
 
  private:
-  ColumnFamilySet* column_family_set_;
-  ColumnFamilyData* current_;
+  ColumnFamilySet* column_family_set_; //column_family的集合。。
+  ColumnFamilyData* current_; //当前的column_family，通过seek进行改变
   ColumnFamilyHandleInternal handle_;
 };
 

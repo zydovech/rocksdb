@@ -294,11 +294,15 @@ inline int InternalKeyComparator::Compare(const InternalKey& a,
 
 inline bool ParseInternalKey(const Slice& internal_key,
                              ParsedInternalKey* result) {
-  const size_t n = internal_key.size();
+    //internal key的大小
+    const size_t n = internal_key.size();
+    //至少8个字节，因为最后八个字节用于存放sequence和type
   if (n < 8) return false;
   uint64_t num = DecodeFixed64(internal_key.data() + n - 8);
   unsigned char c = num & 0xff;
+  //sequence的低八位 不存储实际的数据，
   result->sequence = num >> 8;
+  //低八位代表的是type
   result->type = static_cast<ValueType>(c);
   assert(result->type <= ValueType::kMaxValue);
   result->user_key = Slice(internal_key.data(), n - 8);
@@ -644,10 +648,10 @@ inline int InternalKeyComparator::Compare(const Slice& akey,
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_.Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
-  if (r == 0) {
+  if (r == 0) {//如果userKey相同的话，则继续比较sequence number
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
-    if (anum > bnum) {
+    if (anum > bnum) { //大的则算小，小的排在前面
       r = -1;
     } else if (anum < bnum) {
       r = +1;

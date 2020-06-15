@@ -763,12 +763,15 @@ Status WriteBatchInternal::Put(WriteBatch* b, uint32_t column_family_id,
 
   LocalSavePoint save(b);
   WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
-  if (column_family_id == 0) {
+  //是否携带column_family_id
+  if (column_family_id == 0) { //default的column_family_id是0吗？
     b->rep_.push_back(static_cast<char>(kTypeValue));
   } else {
+      //如果不是0，则加上column_family_id
     b->rep_.push_back(static_cast<char>(kTypeColumnFamilyValue));
     PutVarint32(&b->rep_, column_family_id);
   }
+  //是否携带timestamp
   if (0 == b->timestamp_size_) {
     PutLengthPrefixedSlice(&b->rep_, key);
   } else {
@@ -777,6 +780,7 @@ Status WriteBatchInternal::Put(WriteBatch* b, uint32_t column_family_id,
     b->rep_.append(key.data(), key.size());
     b->rep_.append(b->timestamp_size_, '\0');
   }
+  //存储val
   PutLengthPrefixedSlice(&b->rep_, value);
   b->content_flags_.store(
       b->content_flags_.load(std::memory_order_relaxed) | ContentFlags::HAS_PUT,
@@ -2052,7 +2056,7 @@ Status WriteBatchInternal::SetContents(WriteBatch* b, const Slice& contents) {
   b->content_flags_.store(ContentFlags::DEFERRED, std::memory_order_relaxed);
   return Status::OK();
 }
-
+//进行append,
 Status WriteBatchInternal::Append(WriteBatch* dst, const WriteBatch* src,
                                   const bool wal_only) {
   size_t src_len;
@@ -2070,9 +2074,10 @@ Status WriteBatchInternal::Append(WriteBatch* dst, const WriteBatch* src,
     src_count = Count(src);
     src_flags = src->content_flags_.load(std::memory_order_relaxed);
   }
-
+  //设置新的count
   SetCount(dst, Count(dst) + src_count);
   assert(src->rep_.size() >= WriteBatchInternal::kHeader);
+  //src的header不再需要，跳过去
   dst->rep_.append(src->rep_.data() + WriteBatchInternal::kHeader, src_len);
   dst->content_flags_.store(
       dst->content_flags_.load(std::memory_order_relaxed) | src_flags,

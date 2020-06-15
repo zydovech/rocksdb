@@ -435,14 +435,14 @@ class VersionEdit {
 
   int max_level_ = 0;
   std::string db_id_;
-  std::string comparator_;
-  uint64_t log_number_ = 0;
-  uint64_t prev_log_number_ = 0;
-  uint64_t next_file_number_ = 0;
+  std::string comparator_; // key comparator名字
+  uint64_t log_number_ = 0;// 日志编号
+  uint64_t prev_log_number_ = 0; // 前一个日志编号,为了兼容老版本，新版本已弃用，一直为0
+  uint64_t next_file_number_ = 0; // 下一个文件编号
   uint32_t max_column_family_ = 0;
   // The most recent WAL log number that is deleted
   uint64_t min_log_number_to_keep_ = 0;
-  SequenceNumber last_sequence_ = 0;
+  SequenceNumber last_sequence_ = 0; // db中最大的seq（序列号），即最后一对kv事务操作的序列号
   bool has_db_id_ = false;
   bool has_comparator_ = false;
   bool has_log_number_ = false;
@@ -452,8 +452,8 @@ class VersionEdit {
   bool has_min_log_number_to_keep_ = false;
   bool has_last_sequence_ = false;
 
-  DeletedFiles deleted_files_;
-  NewFiles new_files_;
+  DeletedFiles deleted_files_; //待删除文件
+  NewFiles new_files_; //新增文件，例如immutable memtable dump后就会添加到new_files_
 
   BlobFileAdditions blob_file_additions_;
   BlobFileGarbages blob_file_garbages_;

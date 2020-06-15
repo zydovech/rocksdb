@@ -116,9 +116,9 @@ const char* InternalKeyComparator::Name() const { return name_.c_str(); }
 int InternalKeyComparator::Compare(const ParsedInternalKey& a,
                                    const ParsedInternalKey& b) const {
   // Order by:
-  //    increasing user key (according to user-supplied comparator)
-  //    decreasing sequence number
-  //    decreasing type (though sequence# should be enough to disambiguate)
+  //    increasing user key (according to user-supplied comparator) key的升序
+  //    decreasing sequence number  sequence 的降序
+  //    decreasing type (though sequence# should be enough to disambiguate) type的降序
   int r = user_comparator_.Compare(a.user_key, b.user_key);
   if (r == 0) {
     if (a.sequence > b.sequence) {
@@ -170,8 +170,11 @@ void InternalKeyComparator::FindShortSuccessor(std::string* key) const {
 
 LookupKey::LookupKey(const Slice& _user_key, SequenceNumber s,
                      const Slice* ts) {
-  size_t usize = _user_key.size();
+    //获取userKey的大小
+    size_t usize = _user_key.size();
+    //获取timestamp的大小
   size_t ts_sz = (nullptr == ts) ? 0 : ts->size();
+  //计算实际需要多大空间
   size_t needed = usize + ts_sz + 13;  // A conservative estimate
   char* dst;
   if (needed <= sizeof(space_)) {
@@ -180,7 +183,7 @@ LookupKey::LookupKey(const Slice& _user_key, SequenceNumber s,
     dst = new char[needed];
   }
   start_ = dst;
-  // NOTE: We don't support users keys of more than 2GB :)
+  // NOTE: We don't support users keys of more than 2GB :) 这个地方放在一起，后面怎么把key和ts分开
   dst = EncodeVarint32(dst, static_cast<uint32_t>(usize + ts_sz + 8));
   kstart_ = dst;
   memcpy(dst, _user_key.data(), usize);

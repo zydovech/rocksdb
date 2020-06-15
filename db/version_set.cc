@@ -3849,7 +3849,7 @@ Status VersionSet::ProcessManifestWrites(
         }
       }
 
-      // Write new records to MANIFEST log
+      // Write new records to MANIFEST log 写新的record到manifest文件
 #ifndef NDEBUG
       size_t idx = 0;
 #endif
@@ -4292,6 +4292,7 @@ Status VersionSet::ExtractInfoFromVersionEdit(
   return Status::OK();
 }
 
+//获取当前manifest文件的path以及file_number
 Status VersionSet::GetCurrentManifestPath(const std::string& dbname,
                                           FileSystem* fs,
                                           std::string* manifest_path,
@@ -4300,6 +4301,7 @@ Status VersionSet::GetCurrentManifestPath(const std::string& dbname,
   assert(manifest_path != nullptr);
   assert(manifest_file_number != nullptr);
 
+  //从current文件中，读取内容到fname，由于current文件的内容就是manifest文件的内容
   std::string fname;
   Status s = ReadFileToString(fs, CurrentFileName(dbname), &fname);
   if (!s.ok()) {
@@ -4308,9 +4310,10 @@ Status VersionSet::GetCurrentManifestPath(const std::string& dbname,
   if (fname.empty() || fname.back() != '\n') {
     return Status::Corruption("CURRENT file does not end with newline");
   }
-  // remove the trailing '\n'
+  // remove the trailing '\n' 去除尾部的\n
   fname.resize(fname.size() - 1);
   FileType type;
+  //解析文件名字，从名字里面可以得到类型（这里肯定是kDescriptorFile），以及manifest文件的number
   bool parse_ok = ParseFileName(fname, manifest_file_number, &type);
   if (!parse_ok || type != kDescriptorFile) {
     return Status::Corruption("CURRENT file corrupted");
@@ -4402,7 +4405,7 @@ Status VersionSet::Recover(
   std::unordered_map<int, std::string> column_families_not_found;
 
   // Read "CURRENT" file, which contains a pointer to the current manifest file
-  std::string manifest_path;
+  std::string manifest_path; //指向的是当前manifest文件的全路径
   Status s = GetCurrentManifestPath(dbname_, fs_, &manifest_path,
                                     &manifest_file_number_);
   if (!s.ok()) {

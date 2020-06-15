@@ -50,9 +50,11 @@ Status Writer::Close() {
 
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
+  //left代表data的大小
   size_t left = slice.size();
 
   // Header size varies depending on whether we are recycling or not.
+  //根据是否可回收的，头部大小是不一样的
   const int header_size =
       recycle_log_files_ ? kRecyclableHeaderSize : kHeaderSize;
 
@@ -62,11 +64,12 @@ Status Writer::AddRecord(const Slice& slice) {
   Status s;
   bool begin = true;
   do {
+      //计算当前block还有多少剩余空间
     const int64_t leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
-    if (leftover < header_size) {
+    if (leftover < header_size) {//如果当前block剩余的空间小于一个header_size，则换到一个新的block
       // Switch to a new block
-      if (leftover > 0) {
+      if (leftover > 0) {//填充剩余的空间
         // Fill the trailer (literal below relies on kHeaderSize and
         // kRecyclableHeaderSize being <= 11)
         assert(header_size <= 11);
@@ -81,13 +84,15 @@ Status Writer::AddRecord(const Slice& slice) {
 
     // Invariant: we never leave < header_size bytes in a block.
     assert(static_cast<int64_t>(kBlockSize - block_offset_) >= header_size);
-
+    //计算当前block还有多少空间
     const size_t avail = kBlockSize - block_offset_ - header_size;
+    //看数据的大小和avail之间的关系
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
+    //如果当前分片的大小和数据大小一致，则是完整的
     const bool end = (left == fragment_length);
-    if (begin && end) {
+    if (begin && end) {//是begin也是结束，则是完整的record，type是kFullType
       type = recycle_log_files_ ? kRecyclableFullType : kFullType;
     } else if (begin) {
       type = recycle_log_files_ ? kRecyclableFirstType : kFirstType;
@@ -98,7 +103,9 @@ Status Writer::AddRecord(const Slice& slice) {
     }
 
     s = EmitPhysicalRecord(type, ptr, fragment_length);
+    //更新ptr，因为已经写了fragment_length数据到record中
     ptr += fragment_length;
+
     left -= fragment_length;
     begin = false;
   } while (s.ok() && left > 0);
@@ -114,13 +121,14 @@ Status Writer::AddRecord(const Slice& slice) {
 
 bool Writer::TEST_BufferIsEmpty() { return dest_->TEST_BufferIsEmpty(); }
 
+//组装一个record
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   assert(n <= 0xffff);  // Must fit in two bytes
 
   size_t header_size;
   char buf[kRecyclableHeaderSize];
 
-  // Format the header
+  // Format the header 前面四个字节是checksum，然后是长度，然后是type
   buf[4] = static_cast<char>(n & 0xff);
   buf[5] = static_cast<char>(n >> 8);
   buf[6] = static_cast<char>(t);
@@ -150,10 +158,13 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload
+  //写入头部信息，
   Status s = dest_->Append(Slice(buf, header_size));
   if (s.ok()) {
+      //写入数据
     s = dest_->Append(Slice(ptr, n));
   }
+  //更新block_offset
   block_offset_ += header_size + n;
   return s;
 }

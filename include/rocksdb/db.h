@@ -61,9 +61,9 @@ class FileSystem;
 
 extern const std::string kDefaultColumnFamilyName;
 extern const std::string kPersistentStatsColumnFamilyName;
-struct ColumnFamilyDescriptor {
-  std::string name;
-  ColumnFamilyOptions options;
+struct ColumnFamilyDescriptor { //ColumnFamilyDescriptor,一个column family的描述
+  std::string name; //cf的名字
+  ColumnFamilyOptions options; //cf的options
   ColumnFamilyDescriptor()
       : name(kDefaultColumnFamilyName), options(ColumnFamilyOptions()) {}
   ColumnFamilyDescriptor(const std::string& _name,
@@ -74,9 +74,9 @@ struct ColumnFamilyDescriptor {
 class ColumnFamilyHandle {
  public:
   virtual ~ColumnFamilyHandle() {}
-  // Returns the name of the column family associated with the current handle.
+  // Returns the name of the column family associated with the current handle. 返回和当前handle关联的column family的名字
   virtual const std::string& GetName() const = 0;
-  // Returns the ID of the column family associated with the current handle.
+  // Returns the ID of the column family associated with the current handle. 返回ID
   virtual uint32_t GetID() const = 0;
   // Fills "*desc" with the up-to-date descriptor of the column family
   // associated with this handle. Since it fills "*desc" with the up-to-date
@@ -84,10 +84,10 @@ class ColumnFamilyHandle {
   // access the up-to-date CF options.  In addition, all the pointer-typed
   // options cannot be referenced any longer than the original options exist.
   //
-  // Note that this function is not supported in RocksDBLite.
+  // Note that this function is not supported in RocksDBLite. ColumnFamilyDescriptor
   virtual Status GetDescriptor(ColumnFamilyDescriptor* desc) = 0;
   // Returns the comparator of the column family associated with the
-  // current handle.
+  // current handle. 当前column family对应的comparator
   virtual const Comparator* GetComparator() const = 0;
 };
 
