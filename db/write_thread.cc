@@ -58,7 +58,7 @@ uint8_t WriteThread::BlockingAwaitState(Writer* w, uint8_t goal_mask) {
   assert((state & goal_mask) != 0);
   return state;
 }
-
+//等待，直到对应的事情发生
 uint8_t WriteThread::AwaitState(Writer* w, uint8_t goal_mask,
                                 AdaptationContext* ctx) {
   uint8_t state = 0;
@@ -71,6 +71,7 @@ uint8_t WriteThread::AwaitState(Writer* w, uint8_t goal_mask,
   // is the effect of the pause instruction), so 200 iterations is a bit
   // more than a microsecond.  This is long enough that waits longer than
   // this can amortize the cost of accessing the clock and yielding.
+  //用pause自旋一下
   for (uint32_t tries = 0; tries < 200; ++tries) {
     state = w->state.load(std::memory_order_acquire);
     if ((state & goal_mask) != 0) {
@@ -220,7 +221,7 @@ void WriteThread::SetState(Writer* w, uint8_t new_state) {
   }
 }
 
-//这个函数主要用来讲当前的Writer对象加入到group中
+//这个函数主要用来讲当前的Writer对象加入到writer列表里
 bool WriteThread::LinkOne(Writer* w, std::atomic<Writer*>* newest_writer) {
   assert(newest_writer != nullptr);
   assert(w->state == STATE_INIT);
@@ -248,6 +249,7 @@ bool WriteThread::LinkOne(Writer* w, std::atomic<Writer*>* newest_writer) {
         }
       }
     }
+    //把link_older指向writers
     w->link_older = writers;
     if (newest_writer->compare_exchange_weak(writers, w)) {
       return (writers == nullptr); //之前的是null的话，则代表新写入的是leader
@@ -280,6 +282,7 @@ bool WriteThread::LinkGroup(WriteGroup& write_group,
   }
 }
 
+//创建缺失的newer links，就是从后指向前的
 void WriteThread::CreateMissingNewerLinks(Writer* head) {
   while (true) {
     Writer* next = head->link_older;
@@ -287,6 +290,7 @@ void WriteThread::CreateMissingNewerLinks(Writer* head) {
       assert(next == nullptr || next->link_newer == head);
       break;
     }
+    //补全link_newer指针
     next->link_newer = head;
     head = next;
   }
@@ -374,10 +378,11 @@ static WriteThread::AdaptationContext jbg_ctx("JoinBatchGroup");
 void WriteThread::JoinBatchGroup(Writer* w) {
   TEST_SYNC_POINT_CALLBACK("WriteThread::JoinBatchGroup:Start", w);
   assert(w->batch != nullptr);
-
+  //加入到写任务队列中
   bool linked_as_leader = LinkOne(w, &newest_writer_);
 
   if (linked_as_leader) {
+      //更新状态为LEADER
     SetState(w, STATE_GROUP_LEADER);
   }
 
@@ -386,8 +391,8 @@ void WriteThread::JoinBatchGroup(Writer* w) {
   if (!linked_as_leader) { //是leader的话，就直接返回了
     /**
      * Wait util:
-     * 1) An existing leader pick us as the new leader when it finishes
-     * 2) An existing leader pick us as its follewer and
+     * 1) An existing leader pick us as the new leader when it finishes 当之前的leader完成的时候 选择我们当leader
+     * 2) An existing leader pick us as its follewer and 现在的leader选择我们当follewer,并且
      * 2.1) finishes the memtable writes on our behalf
      * 2.2) Or tell us to finish the memtable writes in pralallel
      * 3) (pipelined write) An existing leader pick us as its follower and
@@ -404,7 +409,7 @@ void WriteThread::JoinBatchGroup(Writer* w) {
     TEST_SYNC_POINT_CALLBACK("WriteThread::JoinBatchGroup:DoneWaiting", w);
   }
 }
-
+//尽可能的把多个写组成一个group
 size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
                                             WriteGroup* write_group) {
   assert(leader->link_older == nullptr);
@@ -416,6 +421,7 @@ size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
   // Allow the group to grow up to a maximum size, but if the
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
+  //一次写增大到哪一个程度，如果本来要写的数据比较少的话，则不能扩大很多
   size_t max_size = max_write_batch_group_size_bytes;
   const uint64_t min_batch_size_bytes = max_write_batch_group_size_bytes / 8;
   if (size <= min_batch_size_bytes) {
@@ -433,15 +439,19 @@ size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
   // (they emptied the list and then we added ourself as leader) or had to
   // explicitly wake us up (the list was non-empty when we added ourself,
   // so we have already received our MarkJoined).
+  //把write链表里多有write的link_newer指针给补全了
   CreateMissingNewerLinks(newest_writer);
 
   // Tricky. Iteration start (leader) is exclusive and finish
   // (newest_writer) is inclusive. Iteration goes from old to new.
+  //从leader开始遍历，不包括newest_writer
   Writer* w = leader;
   while (w != newest_writer) {
+      //找到前一个write
     w = w->link_newer;
 
     if (w->sync && !leader->sync) {
+        //不把一个sync的写，放到一个non-sync的写中
       // Do not include a sync write into a batch handled by a non-sync write.
       break;
     }
@@ -453,6 +463,7 @@ size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
     }
 
     if (w->disable_wal != leader->disable_wal) {
+        //两个写对于disable_wal的要求不一样
       // Do not mix writes that enable WAL with the ones whose
       // WAL disabled.
       break;
@@ -470,7 +481,7 @@ size_t WriteThread::EnterAsBatchGroupLeader(Writer* leader,
     }
 
     auto batch_size = WriteBatchInternal::ByteSize(w->batch);
-    if (size + batch_size > max_size) {
+    if (size + batch_size > max_size) {//超过大小限制，则返回
       // Do not make batch too big
       break;
     }
@@ -574,7 +585,7 @@ void WriteThread::ExitAsMemTableWriter(Writer* /*self*/,
   // Note that leader has to exit last, since it owns the write group.
   SetState(leader, STATE_COMPLETED);
 }
-
+//更改write_group里所有write的状态为STATE_PARALLEL_MEMTABLE_WRITER
 void WriteThread::LaunchParallelMemTableWriters(WriteGroup* write_group) {
   assert(write_group != nullptr);
   write_group->running.store(write_group->size);
@@ -739,10 +750,10 @@ void WriteThread::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
   assert(w != nullptr && w->batch == nullptr);
   mu->Unlock();
   bool linked_as_leader = LinkOne(w, &newest_writer_);
-  if (!linked_as_leader) {
+  if (!linked_as_leader) {//如果不是leader，则进行等待
     TEST_SYNC_POINT("WriteThread::EnterUnbatched:Wait");
     // Last leader will not pick us as a follower since our batch is nullptr
-    AwaitState(w, STATE_GROUP_LEADER, &eu_ctx);
+    AwaitState(w, STATE_GROUP_LEADER, &eu_ctx); //进行等待
   }
   if (enable_pipelined_write_) {
     WaitForMemTableWriters();

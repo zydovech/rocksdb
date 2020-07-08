@@ -1444,7 +1444,7 @@ ColumnFamilyData* ColumnFamilySet::GetColumnFamily(uint32_t id) const {
     return nullptr;
   }
 }
-
+//两个map结构来保存的
 ColumnFamilyData* ColumnFamilySet::GetColumnFamily(const std::string& name)
     const {
   auto cfd_iter = column_families_.find(name);
@@ -1472,13 +1472,16 @@ size_t ColumnFamilySet::NumberOfColumnFamilies() const {
 }
 
 // under a DB mutex AND write thread
+//创建一个cf，参数包括名字、id、dummy_versions
 ColumnFamilyData* ColumnFamilySet::CreateColumnFamily(
     const std::string& name, uint32_t id, Version* dummy_versions,
     const ColumnFamilyOptions& options) {
+    //该cf_name不应该存在
   assert(column_families_.find(name) == column_families_.end());
   ColumnFamilyData* new_cfd = new ColumnFamilyData(
       id, name, dummy_versions, table_cache_, write_buffer_manager_, options,
       *db_options_, file_options_, this, block_cache_tracer_);
+  //插入到映射表里面
   column_families_.insert({name, id});
   column_family_data_.insert({id, new_cfd});
   max_column_family_ = std::max(max_column_family_, id);

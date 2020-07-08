@@ -3466,12 +3466,15 @@ std::string Version::DebugString(bool hex, bool print_stats) const {
 }
 
 // this is used to batch writes to the manifest file
+//用于批量写入manifest文件
 struct VersionSet::ManifestWriter {
   Status status;
   bool done;
   InstrumentedCondVar cv;
+  //cf信息
   ColumnFamilyData* cfd;
   const MutableCFOptions mutable_cf_options;
+  //要写入到manifest文件的内容
   const autovector<VersionEdit*>& edit_list;
 
   explicit ManifestWriter(InstrumentedMutex* mu, ColumnFamilyData* _cfd,
@@ -3603,27 +3606,35 @@ Status VersionSet::ProcessManifestWrites(
     FSDirectory* db_directory, bool new_descriptor_log,
     const ColumnFamilyOptions* new_cf_options) {
   assert(!writers.empty());
+  //第一个写
   ManifestWriter& first_writer = writers.front();
   ManifestWriter* last_writer = &first_writer;
 
   assert(!manifest_writers_.empty());
+  //first_writer应该是manifest_writers_的第一个
   assert(manifest_writers_.front() == &first_writer);
-
+  //存放所有的edit
   autovector<VersionEdit*> batch_edits;
+  //一个cf会形成一个version
   autovector<Version*> versions;
   autovector<const MutableCFOptions*> mutable_cf_options_ptrs;
+  //一个cf会有一个builder_guards，用于生成VersionBuilder
   std::vector<std::unique_ptr<BaseReferencedVersionBuilder>> builder_guards;
 
+  //如果第一个是cf的增删操作，则肯定是单独的，只有一个写，且只有一个edit
   if (first_writer.edit_list.front()->IsColumnFamilyManipulation()) {
     // No group commits for column family add or drop
+    //对于cf 的增加和删除不会group commit?
     LogAndApplyCFHelper(first_writer.edit_list.front());
     batch_edits.push_back(first_writer.edit_list.front());
   } else {
+      //下面这段代码做的事情就是把一个cf的batch edit，合并到一个version里面去
     auto it = manifest_writers_.cbegin();
     size_t group_start = std::numeric_limits<size_t>::max();
     while (it != manifest_writers_.cend()) {
       if ((*it)->edit_list.front()->IsColumnFamilyManipulation()) {
         // no group commits for column family add or drop
+        //对于column family add 和drop的如何操作的？
         break;
       }
       last_writer = *(it++);
@@ -3665,9 +3676,10 @@ Status VersionSet::ProcessManifestWrites(
       // TODO(yanqin) maybe consider unordered_map
       Version* version = nullptr;
       VersionBuilder* builder = nullptr;
+      //查找对应cf的version
       for (int i = 0; i != static_cast<int>(versions.size()); ++i) {
         uint32_t cf_id = last_writer->cfd->GetID();
-        if (versions[i]->cfd()->GetID() == cf_id) {
+        if (versions[i]->cfd()->GetID() == cf_id) {//如果找到了对应cf的version，则进行复制
           version = versions[i];
           assert(!builder_guards.empty() &&
                  builder_guards.size() == versions.size());
@@ -3678,6 +3690,7 @@ Status VersionSet::ProcessManifestWrites(
         }
       }
       if (version == nullptr) {
+          //没有当前cf还没有version，则新建一个
         version = new Version(last_writer->cfd, this, file_options_,
                               last_writer->mutable_cf_options,
                               current_version_number_++);
@@ -3685,6 +3698,7 @@ Status VersionSet::ProcessManifestWrites(
         mutable_cf_options_ptrs.push_back(&last_writer->mutable_cf_options);
         builder_guards.emplace_back(
             new BaseReferencedVersionBuilder(last_writer->cfd));
+        //获取builder
         builder = builder_guards.back()->version_builder();
       }
       assert(builder != nullptr);  // make checker happy
@@ -3698,6 +3712,7 @@ Status VersionSet::ProcessManifestWrites(
         } else if (group_start != std::numeric_limits<size_t>::max()) {
           group_start = std::numeric_limits<size_t>::max();
         }
+        //放到builder里？
         Status s = LogAndApplyHelper(last_writer->cfd, builder, e, mu);
         if (!s.ok()) {
           // free up the allocated memory
@@ -3709,10 +3724,13 @@ Status VersionSet::ProcessManifestWrites(
         batch_edits.push_back(e);
       }
     }
+    //上面结束后，已经把所有的version都已经归类好了
+    //把builder里面的内容写到versions里面去
     for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
       assert(!builder_guards.empty() &&
              builder_guards.size() == versions.size());
       auto* builder = builder_guards[i]->version_builder();
+      //写入？
       Status s = builder->SaveTo(versions[i]->storage_info());
       if (!s.ok()) {
         // free up the allocated memory
@@ -3853,7 +3871,7 @@ Status VersionSet::ProcessManifestWrites(
 #ifndef NDEBUG
       size_t idx = 0;
 #endif
-      for (auto& e : batch_edits) {
+      for (auto& e : batch_edits) {//把batch_edit里的每个version edit都encodeto到一个record
         std::string record;
         if (!e->EncodeTo(&record)) {
           s = Status::Corruption("Unable to encode VersionEdit:" +
@@ -3872,6 +3890,7 @@ Status VersionSet::ProcessManifestWrites(
         }
         ++idx;
 #endif /* !NDEBUG */
+        //写入到descriptor_log_
         s = descriptor_log_->AddRecord(record);
         if (!s.ok()) {
           break;
@@ -3889,6 +3908,7 @@ Status VersionSet::ProcessManifestWrites(
     // If we just created a new descriptor file, install it by writing a
     // new CURRENT file that points to it.
     if (s.ok() && new_descriptor_log) {
+        //有新的descriptor_log文件，则要修改CURRENT 文件的内容
       s = SetCurrentFile(env_, dbname_, pending_manifest_file_number_,
                          db_directory);
       TEST_SYNC_POINT("VersionSet::ProcessManifestWrites:AfterNewManifest");
@@ -3961,6 +3981,7 @@ Status VersionSet::ProcessManifestWrites(
 
       for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
         ColumnFamilyData* cfd = versions[i]->cfd_;
+        //加入到Version列表
         AppendVersion(cfd, versions[i]);
       }
     }
@@ -4030,15 +4051,18 @@ Status VersionSet::LogAndApply(
     const ColumnFamilyOptions* new_cf_options) {
   mu->AssertHeld();
   int num_edits = 0;
+
   for (const auto& elist : edit_lists) {
     num_edits += static_cast<int>(elist.size());
   }
+  //如果没有需要修改的话，则直接返回
   if (num_edits == 0) {
     return Status::OK();
   } else if (num_edits > 1) {
 #ifndef NDEBUG
     for (const auto& edit_list : edit_lists) {
       for (const auto& edit : edit_list) {
+          //num_edit大于1的时候，不能有cf的增加和删除操作。调用者需要保证这点。
         assert(!edit->IsColumnFamilyManipulation());
       }
     }
@@ -4056,6 +4080,7 @@ Status VersionSet::LogAndApply(
     assert(static_cast<size_t>(num_cfds) == mutable_cf_options_list.size());
     assert(static_cast<size_t>(num_cfds) == edit_lists.size());
   }
+  //对不同的column_family的修改放在不同的区间
   for (int i = 0; i < num_cfds; ++i) {
     writers.emplace_back(mu, column_family_datas[i],
                          *mutable_cf_options_list[i], edit_lists[i]);
@@ -4063,6 +4088,7 @@ Status VersionSet::LogAndApply(
   }
   assert(!writers.empty());
   ManifestWriter& first_writer = writers.front();
+  //如果first_writer没有结束，且不是manifest_writers_的最前面的写。则进行等着
   while (!first_writer.done && &first_writer != manifest_writers_.front()) {
     first_writer.cv.Wait();
   }
@@ -4085,7 +4111,7 @@ Status VersionSet::LogAndApply(
       ++num_undropped_cfds;
     }
   }
-  if (0 == num_undropped_cfds) {
+  if (0 == num_undropped_cfds) {//如果undropped为0，则不继续处理？为啥
     for (int i = 0; i != num_cfds; ++i) {
       manifest_writers_.pop_front();
     }
@@ -4100,6 +4126,7 @@ Status VersionSet::LogAndApply(
                                new_cf_options);
 }
 
+//设置一些辅助信息。。
 void VersionSet::LogAndApplyCFHelper(VersionEdit* edit) {
   assert(edit->IsColumnFamilyManipulation());
   edit->SetNextFile(next_file_number_.load());
@@ -4155,7 +4182,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
     std::unordered_map<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>>&
         builders,
     VersionEditParams* version_edit_params) {
-  // Not found means that user didn't supply that column
+  // Not found means that user didn't supply that column 没有找到说明 用户没有指定，但是有增加cf的record
   // family option AND we encountered column family add
   // record. Once we encounter column family drop record,
   // we will delete the column family from
@@ -4171,19 +4198,22 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
 
   ColumnFamilyData* cfd = nullptr;
 
-  if (edit.is_column_family_add_) {
-    if (cf_in_builders || cf_in_not_found) {
+  if (edit.is_column_family_add_) {//是否是新增一个column_family
+    if (cf_in_builders || cf_in_not_found) {//这个地方不会出现的吧
       return Status::Corruption(
           "Manifest adding the same column family twice: " +
           edit.column_family_name_);
     }
+    //从name_to_options里面查找，name_to_options里面存放了所有用户指定的cf
     auto cf_options = name_to_options.find(edit.column_family_name_);
     // implicitly add persistent_stats column family without requiring user
     // to specify
+    //显示的增加persistent_stats column family
     bool is_persistent_stats_column_family =
         edit.column_family_name_.compare(kPersistentStatsColumnFamilyName) == 0;
     if (cf_options == name_to_options.end() &&
         !is_persistent_stats_column_family) {
+        //没有找到，且不是persistent_stats column family
       column_families_not_found.insert(
           {edit.column_family_, edit.column_family_name_});
     } else {
@@ -4193,6 +4223,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
         OptimizeForPersistentStats(&cfo);
         cfd = CreateColumnFamily(cfo, &edit);
       } else {
+          //创建对应的column family.这个create column family的操作主要做了啥？
         cfd = CreateColumnFamily(cf_options->second, &edit);
       }
       cfd->set_initialized();
@@ -4201,7 +4232,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
                                    new BaseReferencedVersionBuilder(cfd))));
     }
   } else if (edit.is_column_family_drop_) {
-    if (cf_in_builders) {
+    if (cf_in_builders) {//如果在builder中，则删除
       auto builder = builders.find(edit.column_family_);
       assert(builder != builders.end());
       builders.erase(builder);
@@ -4213,7 +4244,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
         // who else can have reference to cfd!?
         assert(false);
       }
-    } else if (cf_in_not_found) {
+    } else if (cf_in_not_found) {//从column_families_not_found中删除
       column_families_not_found.erase(edit.column_family_);
     } else {
       return Status::Corruption(
@@ -4234,6 +4265,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
     // to builder
     auto builder = builders.find(edit.column_family_);
     assert(builder != builders.end());
+    //进行应用
     Status s = builder->second->version_builder()->Apply(&edit);
     if (!s.ok()) {
       return s;
@@ -4241,7 +4273,7 @@ Status VersionSet::ApplyOneVersionEditToBuilder(
   }
   return ExtractInfoFromVersionEdit(cfd, edit, version_edit_params);
 }
-
+//把from_edit里面的信息加到version_edit_params中
 Status VersionSet::ExtractInfoFromVersionEdit(
     ColumnFamilyData* cfd, const VersionEdit& from_edit,
     VersionEditParams* version_edit_params) {
@@ -4339,8 +4371,11 @@ Status VersionSet::ReadAndRecover(
   Slice record;
   std::string scratch;
   size_t recovered_edits = 0;
+  //manifest文件也是按照log format保存的，一个record一个record的形式
   while (reader->ReadRecord(&record, &scratch) && s.ok()) {
-    VersionEdit edit;
+
+      VersionEdit edit;
+      //一个record就是一个VersionEdit
     s = edit.DecodeFrom(record);
     if (!s.ok()) {
       break;
@@ -4355,7 +4390,7 @@ Status VersionSet::ReadAndRecover(
     if (!s.ok()) {
       break;
     }
-    if (edit.is_in_atomic_group_) {
+    if (edit.is_in_atomic_group_) {//是否在一个原子的group里面
       if (read_buffer->IsFull()) {
         // Apply edits in an atomic group when we have read all edits in the
         // group.
@@ -4374,7 +4409,7 @@ Status VersionSet::ReadAndRecover(
         read_buffer->Clear();
       }
     } else {
-      // Apply a normal edit immediately.
+      // Apply a normal edit immediately. 直接应用
       s = ApplyOneVersionEditToBuilder(edit, name_to_options,
                                        column_families_not_found, builders,
                                        version_edit_params);
@@ -4402,6 +4437,7 @@ Status VersionSet::Recover(
   // keeps track of column families in manifest that were not found in
   // column families parameters. if those column families are not dropped
   // by subsequent manifest records, Recover() will return failure status
+  //
   std::unordered_map<int, std::string> column_families_not_found;
 
   // Read "CURRENT" file, which contains a pointer to the current manifest file
@@ -4490,6 +4526,7 @@ Status VersionSet::Recover(
 
   // there were some column families in the MANIFEST that weren't specified
   // in the argument. This is OK in read_only mode
+  //非read_only且有些cf在manifest里面，但是open的时候却没有指定
   if (read_only == false && !column_families_not_found.empty()) {
     std::string list_of_not_found;
     for (const auto& cf : column_families_not_found) {
@@ -5518,6 +5555,7 @@ ColumnFamilyData* VersionSet::CreateColumnFamily(
   // Ref() dummy version once so that later we can call Unref() to delete it
   // by avoiding calling "delete" explicitly (~Version is private)
   dummy_versions->Ref();
+  //创建一个column_family。。
   auto new_cfd = column_family_set_->CreateColumnFamily(
       edit->column_family_name_, edit->column_family_, dummy_versions,
       cf_options);

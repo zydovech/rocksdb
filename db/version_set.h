@@ -72,6 +72,7 @@ class MergeIteratorBuilder;
 // readers to think it's a valid entry from Manifest. To avoid that confusion
 // introducing VersionEditParams to simply carry around multiple VersionEdit
 // params. It need not point to a valid record in Manifest.
+//这里就是给VersionEdit起了个别名，VersionEditParams还是VersionEdit类型
 using VersionEditParams = VersionEdit;
 
 // Return the smallest index i such that file_level.files[i]->largest >= key.
@@ -800,6 +801,7 @@ class AtomicGroupReadBuffer {
 // VersionSet is the collection of versions of all the column families of the
 // database. Each database owns one VersionSet. A VersionSet has access to all
 // column families via ColumnFamilySet, i.e. set of the column families.
+//version set是数据库所有的cf的version集合，每个数据库拥有一个version set。
 class VersionSet {
  public:
   VersionSet(const std::string& dbname, const ImmutableDBOptions* db_options,
@@ -838,6 +840,7 @@ class VersionSet {
   }
   // The batch version. If edit_list.size() > 1, caller must ensure that
   // no edit in the list column family add or drop
+  //批量的版本，如果edit_list大于0。 调用者需要保证没有增删cf的edit在里面
   Status LogAndApply(
       ColumnFamilyData* column_family_data,
       const MutableCFOptions& mutable_cf_options,
@@ -1122,13 +1125,14 @@ class VersionSet {
   const std::string dbname_;
   std::string db_id_;
   const ImmutableDBOptions* const db_options_;
+  //下个sst file的数字，sst file的文件名是000013.sst
   std::atomic<uint64_t> next_file_number_;
   // Any log number equal or lower than this should be ignored during recovery,
   // and is qualified for being deleted in 2PC mode. In non-2PC mode, this
   // number is ignored.
   std::atomic<uint64_t> min_log_number_to_keep_2pc_ = {0};
   uint64_t manifest_file_number_; //就会说manifest文件名后面的序号，比如MANIFEST-000159,就是000159
-  uint64_t options_file_number_;
+  uint64_t options_file_number_; //options文件名字后面的number, 比如OPTIONS-000008
   uint64_t pending_manifest_file_number_;
   // The last seq visible to reads. It normally indicates the last sequence in
   // the memtable but when using two write queues it could also indicate the
@@ -1147,16 +1151,17 @@ class VersionSet {
   std::atomic<uint64_t> last_published_sequence_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
-  // Opened lazily
+  // Opened lazily 代表的是当前的manifest文件
   std::unique_ptr<log::Writer> descriptor_log_;
 
   // generates a increasing version number for every new version
+  //每次新增一个version的时候，都会增加这个值
   uint64_t current_version_number_;
 
-  // Queue of writers to the manifest file
+  // Queue of writers to the manifest file 记录了所有对manifest文件的写
   std::deque<ManifestWriter*> manifest_writers_;
 
-  // Current size of manifest file
+  // Current size of manifest file 记录了当前的manifest文件的大小
   uint64_t manifest_file_size_;
 
   std::vector<ObsoleteFileInfo> obsolete_files_;

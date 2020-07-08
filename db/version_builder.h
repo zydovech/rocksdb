@@ -22,6 +22,7 @@ class InternalStats;
 // A helper class so we can efficiently apply a whole sequence
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
+//一个帮助类，用于合并多个version edit到一个version，省的中间创建很多version
 class VersionBuilder {
  public:
   VersionBuilder(const FileOptions& file_options, TableCache* table_cache,
@@ -31,7 +32,9 @@ class VersionBuilder {
   Status CheckConsistencyForDeletes(VersionEdit* edit, uint64_t number,
                                     int level);
   bool CheckConsistencyForNumLevels();
+  //应用一个edit到builder里面
   Status Apply(VersionEdit* edit);
+  //把现有的版本，saveto到storage info
   Status SaveTo(VersionStorageInfo* vstorage);
   Status LoadTableHandlers(InternalStats* internal_stats, int max_threads,
                            bool prefetch_index_and_filter_in_cache,

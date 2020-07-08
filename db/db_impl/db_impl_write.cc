@@ -162,10 +162,10 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   StopWatch write_sw(env_, immutable_db_options_.statistics.get(), DB_WRITE);
 
   write_thread_.JoinBatchGroup(&w);
-  if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) {
+  if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) {//并行写memtable的过程
     // we are a non-leader in a parallel group
 
-    if (w.ShouldWriteToMemtable()) {
+    if (w.ShouldWriteToMemtable()) { //需要写memtable
       PERF_TIMER_STOP(write_pre_and_post_process_time);
       PERF_TIMER_GUARD(write_memtable_time);
 
@@ -194,7 +194,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
     status = w.FinalStatus();
   }
-  if (w.state == WriteThread::STATE_COMPLETED) {
+  if (w.state == WriteThread::STATE_COMPLETED) {//已经完成了
     if (log_used != nullptr) {
       *log_used = w.log_used;
     }
@@ -237,6 +237,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
     PERF_TIMER_START(write_pre_and_post_process_time);
   }
+  //从logs_里面取出来，用于写wal日志
   log::Writer* log_writer = logs_.back().writer;
 
   mutex_.Unlock();
@@ -247,6 +248,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   // into memtables
 
   TEST_SYNC_POINT("DBImpl::WriteImpl:BeforeLeaderEnters");
+  //把多个写 合并到write_group中
   last_batch_group_size_ =
       write_thread_.EnterAsBatchGroupLeader(&w, &write_group);
 
@@ -268,6 +270,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     size_t valid_batches = 0;
     size_t total_byte_size = 0;
     size_t pre_release_callback_cnt = 0;
+    //遍历当前group里面的所有write
     for (auto* writer : write_group) {
       if (writer->CheckCallback(this)) {
         valid_batches += writer->batch_cnt;
@@ -322,6 +325,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     if (!two_write_queues_) {
       if (status.ok() && !write_options.disableWAL) {
         PERF_TIMER_GUARD(write_wal_time);
+        //先写wal
         status = WriteToWAL(write_group, log_writer, log_used, need_log_sync,
                             need_log_dir_sync, last_sequence + 1);
       }
@@ -375,7 +379,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     if (status.ok()) {
       PERF_TIMER_GUARD(write_memtable_time);
 
-      if (!parallel) {
+      if (!parallel) {//是否允许并发写memtable
         // w.sequence will be set inside InsertInto
         w.status = WriteBatchInternal::InsertInto(
             write_group, current_sequence, column_family_memtables_.get(),
@@ -384,16 +388,19 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
             0 /*recovery_log_number*/, this, parallel, seq_per_batch_,
             batch_per_txn_);
       } else {
+          //允许并发写的话，
         write_group.last_sequence = last_sequence;
+        //设置write的状态为STATE_PARALLEL_MEMTABLE_WRITER
         write_thread_.LaunchParallelMemTableWriters(&write_group);
         in_parallel_group = true;
 
         // Each parallel follower is doing each own writes. The leader should
         // also do its own.
-        if (w.ShouldWriteToMemtable()) {
+        if (w.ShouldWriteToMemtable()) {//是否允许写memtable
           ColumnFamilyMemTablesImpl column_family_memtables(
               versions_->GetColumnFamilySet());
           assert(w.sequence == current_sequence);
+          //写memtable
           w.status = WriteBatchInternal::InsertInto(
               &w, w.sequence, &column_family_memtables, &flush_scheduler_,
               &trim_history_scheduler_,
@@ -1003,6 +1010,7 @@ Status DBImpl::WriteToWAL(const WriteThread::WriteGroup& write_group,
   // Same holds for all in the batch group
   size_t write_with_wal = 0;
   WriteBatch* to_be_cached_state = nullptr;
+  //合并所有的写
   WriteBatch* merged_batch = MergeBatch(write_group, &tmp_batch_,
                                         &write_with_wal, &to_be_cached_state);
   if (merged_batch == write_group.leader->batch) {

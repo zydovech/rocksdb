@@ -24,6 +24,7 @@ class MemTable;
 class FlushScheduler;
 class ColumnFamilyData;
 
+//实现见ColumnFamilyMemTablesImpl
 class ColumnFamilyMemTables {
  public:
   virtual ~ColumnFamilyMemTables() {}

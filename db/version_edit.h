@@ -42,6 +42,7 @@ extern uint64_t PackFileNumberAndPathId(uint64_t number, uint64_t path_id);
 struct FileDescriptor {
   // Table reader in table_reader_handle
   TableReader* table_reader;
+  //number和path_id的组合，number就是000013.sst 中的13
   uint64_t packed_number_and_path_id;
   uint64_t file_size;  // File size in bytes
   SequenceNumber smallest_seqno;  // The smallest seqno in this file
@@ -451,7 +452,7 @@ class VersionEdit {
   bool has_max_column_family_ = false;
   bool has_min_log_number_to_keep_ = false;
   bool has_last_sequence_ = false;
-
+  //一个version edit必然是下面的两种之一吗？
   DeletedFiles deleted_files_; //待删除文件
   NewFiles new_files_; //新增文件，例如immutable memtable dump后就会添加到new_files_
 
@@ -460,13 +461,15 @@ class VersionEdit {
 
   // Each version edit record should have column_family_ set
   // If it's not set, it is default (0)
+  //每个version都应该设置column_family_，没有设置的话，就相当于是default cf
   uint32_t column_family_ = 0;
   // a version edit can be either column_family add or
   // column_family drop. If it's column family add,
   // it also includes column family name.
+  //一个version edit可以是is_column_family_drop_和is_column_family_add_，如果是add,则还需要有column_family_name_
   bool is_column_family_drop_ = false;
-  bool is_column_family_add_ = false;
-  std::string column_family_name_;
+  bool is_column_family_add_ = false; //是否是column_family
+  std::string column_family_name_; //该version对应的column_family的名字
 
   bool is_in_atomic_group_ = false;
   uint32_t remaining_entries_ = 0;

@@ -1517,6 +1517,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   StopWatch sw(env_, stats_, DB_GET);
   PERF_TIMER_GUARD(get_snapshot_time);
 
+  //获取ColumnFamilyHandleImpl，调用get的时候需要传递ColumnFamilyHandle
   auto cfh =
       reinterpret_cast<ColumnFamilyHandleImpl*>(get_impl_options.column_family);
   auto cfd = cfh->cfd();
@@ -2261,7 +2262,7 @@ Status DBImpl::CreateColumnFamilies(
   }
   return s;
 }
-
+//创建一个新的column family
 Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
                                       const std::string& column_family_name,
                                       ColumnFamilyHandle** handle) {
@@ -2290,9 +2291,12 @@ Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
 
     if (versions_->GetColumnFamilySet()->GetColumnFamily(column_family_name) !=
         nullptr) {
+        //已经存在，无法再次新建
       return Status::InvalidArgument("Column family already exists");
     }
+    //新增一个版本
     VersionEdit edit;
+    //新增一个cf
     edit.AddColumnFamily(column_family_name);
     uint32_t new_id = versions_->GetColumnFamilySet()->GetNextColumnFamilyID();
     edit.SetColumnFamily(new_id);
@@ -2387,6 +2391,7 @@ Status DBImpl::DropColumnFamilyImpl(ColumnFamilyHandle* column_family) {
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
   if (cfd->GetID() == 0) {
+      //不会删除default对应的column family
     return Status::InvalidArgument("Can't drop default column family");
   }
 
@@ -2400,11 +2405,13 @@ Status DBImpl::DropColumnFamilyImpl(ColumnFamilyHandle* column_family) {
   {
     InstrumentedMutexLock l(&mutex_);
     if (cfd->IsDropped()) {
+        //不能多次drop
       s = Status::InvalidArgument("Column family already dropped!\n");
     }
     if (s.ok()) {
       // we drop column family from a single write thread
       WriteThread::Writer w;
+      //等待当前writer成为leader
       write_thread_.EnterUnbatched(&w, &mutex_);
       s = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(), &edit,
                                  &mutex_);

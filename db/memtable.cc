@@ -479,6 +479,7 @@ bool MemTable::Add(SequenceNumber s, ValueType type,
   //  value bytes  : char[value.size()]
   uint32_t key_size = static_cast<uint32_t>(key.size());
   uint32_t val_size = static_cast<uint32_t>(value.size());
+  //internal_key 的格式就是 key+sequence+type 。。sequence和type在一起占8个字节，type在sequence的低八位
   uint32_t internal_key_size = key_size + 8;
   const uint32_t encoded_len = VarintLength(internal_key_size) +
                                internal_key_size + VarintLength(val_size) +
@@ -498,6 +499,7 @@ bool MemTable::Add(SequenceNumber s, ValueType type,
   p = EncodeVarint32(p, val_size);
   memcpy(p, value.data(), val_size);
   assert((unsigned)(p + val_size - buf) == (unsigned)encoded_len);
+
   size_t ts_sz = GetInternalKeyComparator().user_comparator()->timestamp_size();
 
   if (!allow_concurrent) {
@@ -510,6 +512,7 @@ bool MemTable::Add(SequenceNumber s, ValueType type,
         return res;
       }
     } else {
+        //插入到skiplist中
       bool res = table->InsertKey(handle);
       if (UNLIKELY(!res)) {
         return res;
@@ -582,6 +585,7 @@ bool MemTable::Add(SequenceNumber s, ValueType type,
         (cur_earliest_seqno == kMaxSequenceNumber || s < cur_earliest_seqno) &&
         !first_seqno_.compare_exchange_weak(cur_earliest_seqno, s)) {
     }
+
   }
   if (type == kTypeRangeDeletion) {
     is_range_del_table_empty_.store(false, std::memory_order_relaxed);

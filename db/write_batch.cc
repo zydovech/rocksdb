@@ -415,6 +415,7 @@ Status ReadRecordFromWriteBatch(Slice* input, char* tag,
                                 uint32_t* column_family, Slice* key,
                                 Slice* value, Slice* blob, Slice* xid) {
   assert(key != nullptr && value != nullptr);
+  //开始的位置是一个tag
   *tag = (*input)[0];
   input->remove_prefix(1);
   *column_family = 0;  // default
@@ -425,6 +426,7 @@ Status ReadRecordFromWriteBatch(Slice* input, char* tag,
       }
       FALLTHROUGH_INTENDED;
     case kTypeValue:
+        //获取key和val
       if (!GetLengthPrefixedSlice(input, key) ||
           !GetLengthPrefixedSlice(input, value)) {
         return Status::Corruption("bad WriteBatch Put");
@@ -511,18 +513,27 @@ Status ReadRecordFromWriteBatch(Slice* input, char* tag,
   return Status::OK();
 }
 
+//遍历的接口。遍历writebatch里面所有的数据，并调用handler进行处理
 Status WriteBatch::Iterate(Handler* handler) const {
-  if (rep_.size() < WriteBatchInternal::kHeader) {
+  if (rep_.size() < WriteBatchInternal::kHeader) { //数据连头部都不够，太小
     return Status::Corruption("malformed WriteBatch (too small)");
   }
 
   return WriteBatchInternal::Iterate(this, handler, WriteBatchInternal::kHeader,
                                      rep_.size());
 }
-
+/*
+ * wb:要写的内容
+ * handler: 每个元素的处理函数
+ * begin: 数据开始的地方，WriteBatchInternal::kHeader
+ * end: 数据结束的地方 ， rep_.size()
+ * batch里面把多条数据封装在一起，总体格式如下：
+ * header(12字节 seq+cnt ) + record(type+column_family+type+key+val)
+ * */
 Status WriteBatchInternal::Iterate(const WriteBatch* wb,
                                    WriteBatch::Handler* handler, size_t begin,
                                    size_t end) {
+    //参数校验
   if (begin > wb->rep_.size() || end > wb->rep_.size() || end < begin) {
     return Status::Corruption("Invalid start/end bounds for Iterate");
   }
@@ -553,7 +564,7 @@ Status WriteBatchInternal::Iterate(const WriteBatch* wb,
       last_was_try_again = false;
       tag = 0;
       column_family = 0;  // default
-
+        //读取一个record
       s = ReadRecordFromWriteBatch(&input, &tag, &column_family, &key, &value,
                                    &blob, &xid);
       if (!s.ok()) {
@@ -576,6 +587,7 @@ Status WriteBatchInternal::Iterate(const WriteBatch* wb,
       case kTypeValue:
         assert(wb->content_flags_.load(std::memory_order_relaxed) &
                (ContentFlags::DEFERRED | ContentFlags::HAS_PUT));
+        //插入数据
         s = handler->PutCF(column_family, key, value);
         if (LIKELY(s.ok())) {
           empty_batch = false;
@@ -586,6 +598,7 @@ Status WriteBatchInternal::Iterate(const WriteBatch* wb,
       case kTypeDeletion:
         assert(wb->content_flags_.load(std::memory_order_relaxed) &
                (ContentFlags::DEFERRED | ContentFlags::HAS_DELETE));
+        //删除
         s = handler->DeleteCF(column_family, key);
         if (LIKELY(s.ok())) {
           empty_batch = false;
@@ -1189,6 +1202,7 @@ Status WriteBatch::AssignTimestamps(const std::vector<Slice>& ts_list) {
   return Iterate(&ts_assigner);
 }
 
+//插入到memtable的实现
 class MemTableInserter : public WriteBatch::Handler {
 
   SequenceNumber sequence_;
@@ -1409,6 +1423,7 @@ class MemTableInserter : public WriteBatch::Handler {
     }
 
     Status seek_status;
+    //依据column_family_id定位到对应的column_family
     if (UNLIKELY(!SeekToColumnFamily(column_family_id, &seek_status))) {
       bool batch_boundry = false;
       if (rebuilding_trx_ != nullptr) {
@@ -1422,7 +1437,7 @@ class MemTableInserter : public WriteBatch::Handler {
       return seek_status;
     }
     Status ret_status;
-
+    //获取当前column_family对应的memtable
     MemTable* mem = cf_mems_->GetMemTable();
     auto* moptions = mem->GetImmutableMemTableOptions();
     // inplace_update_support is inconsistent with snapshots, and therefore with
@@ -2000,7 +2015,7 @@ Status WriteBatchInternal::InsertInto(
   }
   return Status::OK();
 }
-
+//写memtable
 Status WriteBatchInternal::InsertInto(
     WriteThread::Writer* writer, SequenceNumber sequence,
     ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
@@ -2017,8 +2032,10 @@ Status WriteBatchInternal::InsertInto(
       ignore_missing_column_families, log_number, db,
       concurrent_memtable_writes, nullptr /*has_valid_writes*/, seq_per_batch,
       batch_per_txn, hint_per_batch);
+  //设置batch write的sequence
   SetSequence(writer->batch, sequence);
   inserter.set_log_number_ref(writer->log_ref);
+
   Status s = writer->batch->Iterate(&inserter);
   assert(!seq_per_batch || batch_cnt != 0);
   assert(!seq_per_batch || inserter.sequence() - sequence == batch_cnt);

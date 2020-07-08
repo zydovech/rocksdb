@@ -51,6 +51,7 @@ Reader::~Reader() {
 //
 // TODO krad: Evaluate if we need to move to a more strict mode where we
 // restrict the inconsistency to only the last log
+// scratch 参数用于读取一个record跨了多个block的时候，用于临时存放数据。一个block 32k
 bool Reader::ReadRecord(Slice* record, std::string* scratch,
                         WALRecoveryMode wal_recovery_mode) {
   scratch->clear();

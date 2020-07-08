@@ -49,7 +49,7 @@ class WriteThread {
     // the leader to STATE_COMPLETED.
     STATE_GROUP_LEADER = 2,
 
-    // The state used to inform a waiting writer that it has become the
+    // The state used to inform a waiting writer that it has become the 在memetable 写group中成为了leader
     // leader of memtable writer group. The leader will either write
     // memtable for the whole group, or launch a parallel group write
     // to memtable by calling LaunchParallelMemTableWrite.
@@ -59,7 +59,7 @@ class WriteThread {
     // parallel memtable writer. It can be the group leader who launch the
     // parallel writer group, or one of the followers. The writer should then
     // apply its batch to the memtable concurrently and call
-    // CompleteParallelMemTableWriter.
+    // CompleteParallelMemTableWriter. 并发写
     STATE_PARALLEL_MEMTABLE_WRITER = 8,
 
     // A follower whose writes have been applied, or a parallel leader
@@ -75,8 +75,8 @@ class WriteThread {
   struct Writer;
 
   struct WriteGroup {
-    Writer* leader = nullptr;
-    Writer* last_writer = nullptr;
+    Writer* leader = nullptr; //write group的leader
+    Writer* last_writer = nullptr; //write group的last,组成一个链表
     SequenceNumber last_sequence;
     // before running goes to zero, status needs leader->StateMutex()
     Status status;
@@ -91,7 +91,7 @@ class WriteThread {
           : writer(w), last_writer(last) {}
 
       Writer* operator*() const { return writer; }
-
+        //迭代器的逻辑，很简单从后往前遍历
       Iterator& operator++() {
         assert(writer != nullptr);
         if (writer == last_writer) {
@@ -113,6 +113,7 @@ class WriteThread {
 
   // Information kept for every waiting writer.
   struct Writer {
+      //要写入的内容
     WriteBatch* batch;
     bool sync;
     bool no_slowdown;
@@ -125,15 +126,15 @@ class WriteThread {
     WriteCallback* callback;
     bool made_waitable;          // records lazy construction of mutex and cv
     std::atomic<uint8_t> state;  // write under StateMutex() or pre-link
-    WriteGroup* write_group;
+    WriteGroup* write_group; //指向当前写所属的group
     SequenceNumber sequence;  // the sequence number to use for the first key
     Status status;
     Status callback_status;   // status returned by callback->Callback()
 
     std::aligned_storage<sizeof(std::mutex)>::type state_mutex_bytes;
     std::aligned_storage<sizeof(std::condition_variable)>::type state_cv_bytes;
-    Writer* link_older;  // read/write only before linking, or as leader
-    Writer* link_newer;  // lazy, read/write only before linking, or as leader
+    Writer* link_older;  // read/write only before linking, or as leader 往后指的指针
+    Writer* link_newer;  // lazy, read/write only before linking, or as leader 往前走的指针
 
     Writer()
         : batch(nullptr),
@@ -367,6 +368,7 @@ class WriteThread {
 
   // Points to the newest pending writer. Only leader can remove
   // elements, adding can be done lock-free by anybody.
+  //用的是cas进行更新
   std::atomic<Writer*> newest_writer_; //保存的是最新的写入对象
 
   // Points to the newest pending memtable writer. Used only when pipelined

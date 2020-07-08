@@ -97,7 +97,9 @@ class VersionBuilder::Rep {
   // Whether there are invalid new files or invalid deletion on levels larger
   // than num_levels_.
   bool has_invalid_levels_;
+  //level0的比较
   FileComparator level_zero_cmp_;
+  //非level0 的比较
   FileComparator level_nonzero_cmp_;
 
  public:
@@ -159,7 +161,7 @@ class VersionBuilder::Rep {
         TEST_SYNC_POINT_CALLBACK("VersionBuilder::CheckConsistency", &pair);
 #endif
         if (level == 0) {
-          if (!level_zero_cmp_(f1, f2)) {
+          if (!level_zero_cmp_(f1, f2)) { //level0 file的key 有重复，但是seqno还是递增的
             fprintf(stderr, "L0 files are not sorted properly");
             return Status::Corruption("L0 files are not sorted properly");
           }
@@ -203,7 +205,7 @@ class VersionBuilder::Rep {
                                       " files are not sorted properly");
           }
 
-          // Make sure there is no overlap in levels > 0
+          // Make sure there is no overlap in levels > 0 检查文件是否有重叠
           if (vstorage->InternalComparator()->Compare(f1->largest,
                                                       f2->smallest) >= 0) {
             fprintf(stderr, "L%d have overlapping ranges %s vs. %s\n", level,
@@ -282,14 +284,15 @@ class VersionBuilder::Rep {
     return true;
   }
 
-  // Apply all of the edits in *edit to the current state.
+  // Apply all of the edits in *edit to the current state.一个version edit必然是有文件的增删。
+
   Status Apply(VersionEdit* edit) {
     Status s = CheckConsistency(base_vstorage_);
     if (!s.ok()) {
       return s;
     }
 
-    // Delete files
+    // Delete files 获取所有删除的文件
     const auto& del = edit->GetDeletedFiles();
     for (const auto& del_file : del) {
       const auto level = del_file.first;
@@ -299,7 +302,7 @@ class VersionBuilder::Rep {
         CheckConsistencyForDeletes(edit, number, level);
 
         auto exising = levels_[level].added_files.find(number);
-        if (exising != levels_[level].added_files.end()) {
+        if (exising != levels_[level].added_files.end()) {//
           UnrefFile(exising->second);
           levels_[level].added_files.erase(exising);
         }
@@ -315,6 +318,7 @@ class VersionBuilder::Rep {
     for (const auto& new_file : edit->GetNewFiles()) {
       const int level = new_file.first;
       if (level < num_levels_) {
+          //second就是FileMetaData
         FileMetaData* f = new FileMetaData(new_file.second);
         f->refs = 1;
 

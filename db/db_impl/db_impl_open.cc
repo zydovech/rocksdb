@@ -1276,8 +1276,10 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
 }
 
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
-  DBOptions db_options(options);
+    //Options 继承与DBOptions和ColumnFamilyOptions
+    DBOptions db_options(options);
   ColumnFamilyOptions cf_options(options);
+  //组成ColumnFamilyDescriptor,默认存在default一个column_family
   std::vector<ColumnFamilyDescriptor> column_families;
   column_families.push_back(
       ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
@@ -1286,6 +1288,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
         ColumnFamilyDescriptor(kPersistentStatsColumnFamilyName, cf_options));
   }
   std::vector<ColumnFamilyHandle*> handles;
+
   Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
   if (s.ok()) {
     if (db_options.persist_stats_to_disk) {
@@ -1295,6 +1298,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
     }
     // i can delete the handle since DBImpl is always holding a reference to
     // default column family
+    //可以把default对应的handle给删除了，因为DBTmpl里面一直持有default column family
     if (db_options.persist_stats_to_disk && handles[1] != nullptr) {
       delete handles[1];
     }
@@ -1311,7 +1315,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                       !kSeqPerBatch, kBatchPerTxn);
 }
-
+//创建一个wal文件。。。
 Status DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
                          size_t preallocate_block_size, log::Writer** new_log) {
   Status s;
@@ -1321,6 +1325,7 @@ Status DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
       BuildDBOptions(immutable_db_options_, mutable_db_options_);
   FileOptions opt_file_options =
       fs_->OptimizeForLogWrite(file_options_, db_options);
+  //log_fname就是  log_file_num.log 如: 000005.log
   std::string log_fname =
       LogFileName(immutable_db_options_.wal_dir, log_file_num);
 
@@ -1341,7 +1346,7 @@ Status DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
   if (s.ok()) {
     lfile->SetWriteLifeTimeHint(CalculateWALWriteHint());
     lfile->SetPreallocationBlockSize(preallocate_block_size);
-
+    //组装日志文件
     const auto& listeners = immutable_db_options_.listeners;
     std::unique_ptr<WritableFileWriter> file_writer(
         new WritableFileWriter(std::move(lfile), log_fname, opt_file_options,
@@ -1369,7 +1374,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
 
   *dbptr = nullptr;
   handles->clear();
-
+    //max_write_buffer_size 是所有的最大值
   size_t max_write_buffer_size = 0;
   for (auto cf : column_families) {
     max_write_buffer_size =
@@ -1416,6 +1421,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
   uint64_t recovered_seq(kMaxSequenceNumber);
   s = impl->Recover(column_families, false, false, false, &recovered_seq);
   if (s.ok()) {
+      //处理wal文件
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     log::Writer* new_log = nullptr;
     const size_t preallocate_block_size =
@@ -1423,15 +1429,17 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
     s = impl->CreateWAL(new_log_number, 0 /*recycle_log_number*/,
                         preallocate_block_size, &new_log);
     if (s.ok()) {
+        //创建成功
       InstrumentedMutexLock wl(&impl->log_write_mutex_);
       impl->logfile_number_ = new_log_number;
       assert(new_log != nullptr);
+      //放到logs_中
       impl->logs_.emplace_back(new_log_number, new_log);
     }
-
+    //处理column family
     if (s.ok()) {
-      // set column family handles
-      for (auto cf : column_families) {
+      // recover完成之后，要进行set column family handles
+      for (auto cf : column_families) {//遍历所有的column_families
         auto cfd =
             impl->versions_->GetColumnFamilySet()->GetColumnFamily(cf.name);
         if (cfd != nullptr) {
@@ -1439,10 +1447,12 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
               new ColumnFamilyHandleImpl(cfd, impl, &impl->mutex_));
           impl->NewThreadStatusCfInfo(cfd);
         } else {
+            //采用的是db_options。如果指定创建不存在的colimn，则进行创建
           if (db_options.create_missing_column_families) {
             // missing column family, create it
             ColumnFamilyHandle* handle;
             impl->mutex_.Unlock();
+            //创建column family
             s = impl->CreateColumnFamily(cf.options, cf.name, &handle);
             impl->mutex_.Lock();
             if (s.ok()) {
@@ -1451,6 +1461,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
               break;
             }
           } else {
+              //如果默认不创建的话，则直接抛出错误
             s = Status::InvalidArgument("Column family not found: ", cf.name);
             break;
           }

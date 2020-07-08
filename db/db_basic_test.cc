@@ -21,7 +21,7 @@ namespace ROCKSDB_NAMESPACE {
 
 class DBBasicTest : public DBTestBase {
  public:
-  DBBasicTest() : DBTestBase("/db_basic_test") {}
+  DBBasicTest() : DBTestBase("./db_basic_test") {}
 };
 
 TEST_F(DBBasicTest, OpenWhenOpen) {
@@ -235,15 +235,16 @@ TEST_F(DBBasicTest, LevelLimitReopen) {
 #endif  // ROCKSDB_LITE
 
 TEST_F(DBBasicTest, PutDeleteGet) {
-  do {
-    CreateAndReopenWithCF({"pikachu"}, CurrentOptions());
+        CreateAndReopenWithCF({"pikachu"}, CurrentOptions());
+
+        do {
     ASSERT_OK(Put(1, "foo", "v1"));
     ASSERT_EQ("v1", Get(1, "foo"));
     ASSERT_OK(Put(1, "foo", "v2"));
     ASSERT_EQ("v2", Get(1, "foo"));
     ASSERT_OK(Delete(1, "foo"));
     ASSERT_EQ("NOT_FOUND", Get(1, "foo"));
-  } while (ChangeOptions());
+  } while (1);
 }
 
 TEST_F(DBBasicTest, PutSingleDeleteGet) {

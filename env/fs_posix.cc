@@ -87,6 +87,7 @@ struct LockHoldingInfo {
   int64_t acquire_time;
   uint64_t acquiring_thread;
 };
+//一个变量，保存了关系，是否保存了对应的关系
 static std::map<std::string, LockHoldingInfo> locked_files;
 static port::Mutex mutex_locked_files;
 
@@ -727,6 +728,7 @@ class PosixFileSystem : public FileSystem {
     // Otherwise, we will open a new file descriptor. Locks are associated with
     // a process, not a file descriptor and when *any* file descriptor is
     // closed, all locks the process holds for that *file* are released
+    //插入，成功的话，说明之前没有获取锁，否则表示已经有人获取了锁
     const auto it_success = locked_files.insert({fname, lhi});
     if (it_success.second == false) {
       mutex_locked_files.Unlock();
