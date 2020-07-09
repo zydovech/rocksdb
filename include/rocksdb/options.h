@@ -1483,6 +1483,7 @@ struct CompactRangeOptions {
       BottommostLevelCompaction::kIfHaveCompactionFilter;
   // If true, will execute immediately even if doing so would cause the DB to
   // enter write stall mode. Otherwise, it'll sleep until load is low enough.
+  //如果是true，即使该写会导致db进行写慢的模式，也立即执行。否者睡眠到load足够低
   bool allow_write_stall = false;
   // If > 0, it will replace the option in the DBOptions for this compaction.
   uint32_t max_subcompactions = 0;

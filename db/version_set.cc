@@ -80,6 +80,7 @@ Status OverlapWithIterator(const Comparator* ucmp,
     bool* overlap) {
   InternalKey range_start(smallest_user_key, kMaxSequenceNumber,
                           kValueTypeForSeek);
+  //通过迭代器，进行seek。找到第一个大于range_start的值
   iter->Seek(range_start.Encode());
   if (!iter->status().ok()) {
     return iter->status();
@@ -87,11 +88,12 @@ Status OverlapWithIterator(const Comparator* ucmp,
 
   *overlap = false;
   if (iter->Valid()) {
+  	//找到对应的值了
     ParsedInternalKey seek_result;
     if (!ParseInternalKey(iter->key(), &seek_result)) {
       return Status::Corruption("DB have corrupted keys");
     }
-
+	//如果找到的key,小于等于largest_user_key，则说明有重叠
     if (ucmp->CompareWithoutTimestamp(seek_result.user_key, largest_user_key) <=
         0) {
       *overlap = true;
@@ -793,7 +795,7 @@ void DoGenerateLevelFilesBrief(LevelFilesBrief* file_level,
     f.largest_key = Slice(mem + smallest_size, largest_size);
   }
 }
-
+//看user_key是否大于f指定文件的最大值
 static bool AfterFile(const Comparator* ucmp,
                       const Slice* user_key, const FdWithKeyRange* f) {
   // nullptr user_key occurs before all keys and is therefore never after *f
@@ -810,6 +812,9 @@ static bool BeforeFile(const Comparator* ucmp,
                                         ExtractUserKey(f->smallest_key)) < 0);
 }
 
+/*
+ * disjoint_sorted_files: 对于level大于0则为true
+ * */
 bool SomeFileOverlapsRange(
     const InternalKeyComparator& icmp,
     bool disjoint_sorted_files,
@@ -817,12 +822,12 @@ bool SomeFileOverlapsRange(
     const Slice* smallest_user_key,
     const Slice* largest_user_key) {
   const Comparator* ucmp = icmp.user_comparator();
-  if (!disjoint_sorted_files) {
+  if (!disjoint_sorted_files) {//对应的就是level0的情况
     // Need to check against all files
     for (size_t i = 0; i < file_level.num_files; i++) {
       const FdWithKeyRange* f = &(file_level.files[i]);
       if (AfterFile(ucmp, smallest_user_key, f) ||
-          BeforeFile(ucmp, largest_user_key, f)) {
+          BeforeFile(ucmp, largest_user_key, f)) { //最小值大于最大，或者最大小于最小
         // No overlap
       } else {
         return true;  // Overlap
@@ -830,13 +835,14 @@ bool SomeFileOverlapsRange(
     }
     return false;
   }
-
+  //下面就是level大于0的情况
   // Binary search over file list
   uint32_t index = 0;
   if (smallest_user_key != nullptr) {
     // Find the leftmost possible internal key for smallest_user_key
     InternalKey small;
     small.SetMinPossibleForUserKey(*smallest_user_key);
+    //相当于找到最大值大于等于smallest_user_key的第一个
     index = FindFile(icmp, file_level, small.Encode());
   }
 
@@ -844,7 +850,7 @@ bool SomeFileOverlapsRange(
     // beginning of range is after all files, so no overlap.
     return false;
   }
-
+	//如果largest_user_key比对应文件的最小值小，则没有重叠
   return !BeforeFile(ucmp, largest_user_key, &file_level.files[index]);
 }
 
@@ -1551,6 +1557,7 @@ double VersionStorageInfo::GetEstimatedCompressionRatioAtLevel(
   return static_cast<double>(sum_data_size_bytes) / sum_file_size_bytes;
 }
 
+//添加迭代器
 void Version::AddIterators(const ReadOptions& read_options,
                            const FileOptions& soptions,
                            MergeIteratorBuilder* merge_iter_builder,
@@ -1617,7 +1624,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
         range_del_agg, /*largest_compaction_key=*/nullptr));
   }
 }
-
+//查找重叠的
 Status Version::OverlapWithLevelIterator(const ReadOptions& read_options,
                                          const FileOptions& file_options,
                                          const Slice& smallest_user_key,
@@ -1635,11 +1642,11 @@ Status Version::OverlapWithLevelIterator(const ReadOptions& read_options,
 
   *overlap = false;
 
-  if (level == 0) {
-    for (size_t i = 0; i < storage_info_.LevelFilesBrief(0).num_files; i++) {
+  if (level == 0) {//先看level0的数据
+    for (size_t i = 0; i < storage_info_.LevelFilesBrief(0).num_files; i++) {//因为level0的不同文件之间有重叠，所以需要for循环
       const auto file = &storage_info_.LevelFilesBrief(0).files[i];
       if (AfterFile(ucmp, &smallest_user_key, file) ||
-          BeforeFile(ucmp, &largest_user_key, file)) {
+          BeforeFile(ucmp, &largest_user_key, file)) {//smallest_user_key大于file的最大值，或者largest_user_key小于最小值
         continue;
       }
       ScopedArenaIterator iter(cfd_->table_cache()->NewIterator(
@@ -1651,13 +1658,14 @@ Status Version::OverlapWithLevelIterator(const ReadOptions& read_options,
           /*skip_filters=*/false, /*level=*/0,
           /*smallest_compaction_key=*/nullptr,
           /*largest_compaction_key=*/nullptr));
+      //查看是否有重叠
       status = OverlapWithIterator(
           ucmp, smallest_user_key, largest_user_key, iter.get(), overlap);
-      if (!status.ok() || *overlap) {
+      if (!status.ok() || *overlap) {//如果overlap为true了，则找到了，break
         break;
       }
     }
-  } else if (storage_info_.LevelFilesBrief(level).num_files > 0) {
+  } else if (storage_info_.LevelFilesBrief(level).num_files > 0) {//其他层查找
     auto mem = arena.AllocateAligned(sizeof(LevelIterator));
     ScopedArenaIterator iter(new (mem) LevelIterator(
         cfd_->table_cache(), read_options, file_options,

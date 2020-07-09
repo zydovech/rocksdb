@@ -90,7 +90,7 @@ class ArenaWrappedDBIter : public Iterator {
   }
 
  private:
-  DBIter* db_iter_;
+  DBIter* db_iter_; //ArenaWrappedDBIter包裹的iter
   Arena arena_;
   uint64_t sv_number_;
   ColumnFamilyData* cfd_ = nullptr;

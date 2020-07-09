@@ -712,17 +712,18 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
            level++) {
         overlap = true;
         if (begin != nullptr && end != nullptr) {
+        	//如果开始和结束都不为空，则要查看当前level是否有重叠的
           Status status = current_version->OverlapWithLevelIterator(
               ro, file_options_, *begin, *end, level, &overlap);
           if (!status.ok()) {
             overlap = current_version->storage_info()->OverlapInLevel(
                 level, begin, end);
           }
-        } else {
+        } else {//查看是否有重叠
           overlap = current_version->storage_info()->OverlapInLevel(level,
                                                                     begin, end);
         }
-        if (overlap) {
+        if (overlap) {//有重叠的话，则记录
           if (first_overlapped_level == kInvalidLevel) {
             first_overlapped_level = level;
           }

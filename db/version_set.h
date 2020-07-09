@@ -438,7 +438,7 @@ class VersionStorageInfo {
   const InternalKeyComparator* internal_comparator_;
   const Comparator* user_comparator_;
   int num_levels_;            // Number of levels
-  int num_non_empty_levels_;  // Number of levels. Any level larger than it
+  int num_non_empty_levels_;  // Number of levels. Any level larger than it 任何大于他的，都是空的level
                               // is guaranteed to be empty.
   // Per-level max bytes
   std::vector<uint64_t> level_max_bytes_;

@@ -61,7 +61,7 @@ class MergingIterator : public InternalIterator {
       status_ = s;
     }
   }
-
+  //往merging_iterator里面添加迭代器
   virtual void AddIterator(InternalIterator* iter) {
     assert(direction_ == kForward);
     children_.emplace_back(iter);
@@ -282,11 +282,13 @@ class MergingIterator : public InternalIterator {
 
   bool is_arena_mode_;
   const InternalKeyComparator* comparator_;
+  //所有内部的迭代器的集合 memtable imm L0-LN
   autovector<IteratorWrapper, kNumIterReserve> children_;
 
   // Cached pointer to child iterator with the current key, or nullptr if no
   // child iterators are valid.  This is the top of minHeap_ or maxHeap_
   // depending on the direction.
+  //指向拥有当前key的迭代器
   IteratorWrapper* current_;
   // If any of the children have non-ok status, this is one of them.
   Status status_;
@@ -439,7 +441,10 @@ MergeIteratorBuilder::~MergeIteratorBuilder() {
     merge_iter->~MergingIterator();
   }
 }
-
+//往MergeIteratorBuilder里面添加iterator。。
+//第一次添加的时候，use_merging_iter为false,first_iter为nullptr.所以设置了first_iter的值
+//第二次添加的时候，use_merging_iter为false,first_iter不为nullptr，所以往merge_iter中添加iter,设置use_merging_iter为true
+//后面添加，都会走到use_merging_iter尾true的分支
 void MergeIteratorBuilder::AddIterator(InternalIterator* iter) {
   if (!use_merging_iter && first_iter != nullptr) {
     merge_iter->AddIterator(first_iter);
@@ -459,6 +464,7 @@ InternalIterator* MergeIteratorBuilder::Finish() {
     ret = first_iter;
     first_iter = nullptr;
   } else {
+  	//MergingIterator 继承了InternalIterator
     ret = merge_iter;
     merge_iter = nullptr;
   }
