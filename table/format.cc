@@ -295,6 +295,7 @@ Status ReadFooterFromFile(RandomAccessFileReader* file,
   std::string footer_buf;
   std::unique_ptr<const char[]> internal_buf;
   Slice footer_input;
+
   size_t read_offset =
       (file_size > Footer::kMaxEncodedLength)
           ? static_cast<size_t>(file_size - Footer::kMaxEncodedLength)
@@ -337,6 +338,7 @@ Status ReadFooterFromFile(RandomAccessFileReader* file,
   return Status::OK();
 }
 
+//对block的内容，安装特定的压缩格式进行解压缩
 Status UncompressBlockContentsForCompressionType(
     const UncompressionInfo& uncompression_info, const char* data, size_t n,
     BlockContents* contents, uint32_t format_version,

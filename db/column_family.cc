@@ -1076,13 +1076,16 @@ Status ColumnFamilyData::RangesOverlapWithMemtables(
   ReadOptions read_opts;
   read_opts.total_order_seek = true;
   MergeIteratorBuilder merge_iter_builder(&internal_comparator_, &arena);
+  //添加memtable iterator
   merge_iter_builder.AddIterator(
       super_version->mem->NewIterator(read_opts, &arena));
+  //添加imm里面所有的mmetable到迭代器
   super_version->imm->AddIterators(read_opts, &merge_iter_builder);
   ScopedArenaIterator memtable_iter(merge_iter_builder.Finish());
 
   auto read_seq = super_version->current->version_set()->LastSequence();
   ReadRangeDelAggregator range_del_agg(&internal_comparator_, read_seq);
+
   auto* active_range_del_iter =
       super_version->mem->NewRangeTombstoneIterator(read_opts, read_seq);
   range_del_agg.AddTombstones(
@@ -1094,8 +1097,10 @@ Status ColumnFamilyData::RangesOverlapWithMemtables(
   for (size_t i = 0; i < ranges.size() && status.ok() && !*overlap; ++i) {
     auto* vstorage = super_version->current->storage_info();
     auto* ucmp = vstorage->InternalComparator()->user_comparator();
+    //用最大的sequence num去找
     InternalKey range_start(ranges[i].start, kMaxSequenceNumber,
                             kValueTypeForSeek);
+
     memtable_iter->Seek(range_start.Encode());
     status = memtable_iter->status();
     ParsedInternalKey seek_result;
@@ -1108,7 +1113,7 @@ Status ColumnFamilyData::RangesOverlapWithMemtables(
     if (status.ok()) {
       if (memtable_iter->Valid() &&
           ucmp->Compare(seek_result.user_key, ranges[i].limit) <= 0) {
-        *overlap = true;
+        *overlap = true; //如果找到的key,要比limit小。则肯定有重叠
       } else if (range_del_agg.IsRangeOverlapped(ranges[i].start,
                                                  ranges[i].limit)) {
         *overlap = true;

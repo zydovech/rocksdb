@@ -619,6 +619,7 @@ inline bool Snappy_Compress(const CompressionInfo& /*info*/, const char* input,
 #endif
 }
 
+//如果没有定义SNAPPY，且数据是SNAPPY压缩的，则报错。。
 inline bool Snappy_GetUncompressedLength(const char* input, size_t length,
                                          size_t* result) {
 #ifdef SNAPPY

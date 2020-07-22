@@ -627,6 +627,7 @@ struct Saver {
 };
 }  // namespace
 
+//这是一个回调函数。用于保存遍历到的key
 static bool SaveValue(void* arg, const char* entry) {
   Saver* s = reinterpret_cast<Saver*>(arg);
   assert(s != nullptr);
@@ -642,6 +643,7 @@ static bool SaveValue(void* arg, const char* entry) {
   //    tag      uint64
   //    vlength  varint32f
   //    value    char[vlength]
+  //检查是否和user_key一样，
   // Check that it belongs to same user key.  We do not check the
   // sequence number since the Seek() call above should have skipped
   // all entries with overly large sequence numbers.
@@ -730,6 +732,7 @@ static bool SaveValue(void* arg, const char* entry) {
       case kTypeDeletion:
       case kTypeSingleDeletion:
       case kTypeRangeDeletion: {
+      	//如果type是 delete,则继续寻找
         if (*(s->merge_in_progress)) {
           if (s->value != nullptr) {
             *(s->status) = MergeHelper::TimedFullMerge(
@@ -775,7 +778,7 @@ static bool SaveValue(void* arg, const char* entry) {
     }
   }
 
-  // s->state could be Corrupt, merge or notfound
+  // s->state could be Corrupt, merge or notfound seek可以保证key是相同的？
   return false;
 }
 
@@ -820,7 +823,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value,
     }
   }
 
-  if (bloom_filter_ && !may_contain) {
+  if (bloom_filter_ && !may_contain) { //如果bloom_filter存在，且表示不存在了，则说明肯定不存在
     // iter is null if prefix bloom says the key does not exist
     PERF_COUNTER_ADD(bloom_memtable_miss_count, 1);
     *seq = kMaxSequenceNumber;

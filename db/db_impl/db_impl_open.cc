@@ -1315,7 +1315,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   return DBImpl::Open(db_options, dbname, column_families, handles, dbptr,
                       !kSeqPerBatch, kBatchPerTxn);
 }
-//创建一个wal文件。。。
+//创建一个wal文件。。。只有在Open或者SwitchMemtable的时候才会调用
 Status DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
                          size_t preallocate_block_size, log::Writer** new_log) {
   Status s;

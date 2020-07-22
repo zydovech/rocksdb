@@ -105,6 +105,7 @@ Status DBIter::GetProperty(std::string prop_name, std::string* prop) {
   return Status::InvalidArgument("Unidentified property.");
 }
 
+//解析iter_ 对应的key..到ikey
 bool DBIter::ParseKey(ParsedInternalKey* ikey) {
   if (!ParseInternalKey(iter_.key(), ikey)) {
     status_ = Status::Corruption("corrupted internal key in DBIter");
@@ -140,7 +141,7 @@ void DBIter::Next() {
     // If the current key is a merge, very likely iter already points
     // to the next internal position.
     assert(iter_.Valid());
-    iter_.Next();
+    iter_.Next(); //这里调用next。。遍历下一个元素
     PERF_COUNTER_ADD(internal_key_skipped_count, 1);
   }
 
@@ -215,7 +216,7 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
     // Will update is_key_seqnum_zero_ as soon as we parsed the current key
     // but we need to save the previous value to be used in the loop.
     bool is_prev_key_seqnum_zero = is_key_seqnum_zero_;
-    if (!ParseKey(&ikey_)) {
+    if (!ParseKey(&ikey_)) {//解析key，
       is_key_seqnum_zero_ = false;
       return false;
     }
@@ -240,7 +241,7 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
       break;
     }
 
-    if (TooManyInternalKeysSkipped()) {
+    if (TooManyInternalKeysSkipped()) {//正常这里肯定都会返回true
       return false;
     }
 
@@ -255,16 +256,15 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
       // prev_key.seq <= ikey_.sequence. We are cautious because it will be more
       // prone to bugs causing the same user key with the same sequence number.
       if (!is_prev_key_seqnum_zero && skipping_saved_key &&
-          user_comparator_.CompareWithoutTimestamp(
-              ikey_.user_key, saved_key_.GetUserKey()) <= 0) {
+          user_comparator_.CompareWithoutTimestamp(ikey_.user_key, saved_key_.GetUserKey()) <= 0) {
         num_skipped++;  // skip this entry
         PERF_COUNTER_ADD(internal_key_skipped_count, 1);
       } else {
         assert(!skipping_saved_key ||
-               user_comparator_.CompareWithoutTimestamp(
-                   ikey_.user_key, saved_key_.GetUserKey()) > 0);
+               user_comparator_.CompareWithoutTimestamp(ikey_.user_key, saved_key_.GetUserKey()) > 0);
         num_skipped = 0;
         reseek_done = false;
+        //判断当前ikey的类型
         switch (ikey_.type) {
           case kTypeDeletion:
           case kTypeSingleDeletion:
@@ -280,9 +280,7 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
               valid_ = true;
               return true;
             } else {
-              saved_key_.SetUserKey(
-                  ikey_.user_key, !pin_thru_lifetime_ ||
-                                      !iter_.iter()->IsKeyPinned() /* copy */);
+              saved_key_.SetUserKey(ikey_.user_key, !pin_thru_lifetime_ ||!iter_.iter()->IsKeyPinned() /* copy */);
               skipping_saved_key = true;
               PERF_COUNTER_ADD(internal_delete_skipped_count, 1);
             }
@@ -307,9 +305,7 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
                 skipping_saved_key = true;
               }
             } else {
-              saved_key_.SetUserKey(
-                  ikey_.user_key, !pin_thru_lifetime_ ||
-                                      !iter_.iter()->IsKeyPinned() /* copy */);
+              saved_key_.SetUserKey(ikey_.user_key, !pin_thru_lifetime_ ||!iter_.iter()->IsKeyPinned() /* copy */);
               if (range_del_agg_.ShouldDelete(
                       ikey_, RangeDelPositioningMode::kForwardTraversal)) {
                 // Arrange to skip all upcoming entries for this key since
@@ -332,7 +328,7 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
                 valid_ = true;
                 return true;
               } else {
-                valid_ = true;
+                valid_ = true; //找到了，则直接返回
                 return true;
               }
             }
@@ -368,14 +364,11 @@ bool DBIter::FindNextUserEntryInternal(bool skipping_saved_key,
       // This key was inserted after our snapshot was taken.
       // If this happens too many times in a row for the same user key, we want
       // to seek to the target sequence number.
-      int cmp = user_comparator_.CompareWithoutTimestamp(
-          ikey_.user_key, saved_key_.GetUserKey());
+      int cmp = user_comparator_.CompareWithoutTimestamp(ikey_.user_key, saved_key_.GetUserKey());
       if (cmp == 0 || (skipping_saved_key && cmp < 0)) {
         num_skipped++;
       } else {
-        saved_key_.SetUserKey(
-            ikey_.user_key,
-            !iter_.iter()->IsKeyPinned() || !pin_thru_lifetime_ /* copy */);
+        saved_key_.SetUserKey(ikey_.user_key,!iter_.iter()->IsKeyPinned() || !pin_thru_lifetime_ /* copy */);
         skipping_saved_key = false;
         num_skipped = 0;
         reseek_done = false;
@@ -1089,6 +1082,7 @@ bool DBIter::FindUserKeyBeforeSavedKey() {
   return true;
 }
 
+//max_skippable_internal_keys_ 为0，则不会走到false的片段，所以不会因为这个退出
 bool DBIter::TooManyInternalKeysSkipped(bool increment) {
   if ((max_skippable_internal_keys_ > 0) &&
       (num_internal_keys_skipped_ > max_skippable_internal_keys_)) {
@@ -1110,7 +1104,7 @@ bool DBIter::IsVisible(SequenceNumber sequence, const Slice& ts) {
     return false;
   }
   if (read_callback_ == nullptr) {
-    return sequence <= sequence_;
+    return sequence <= sequence_; //只有小于等于才可见
   } else {
     // TODO(yanqin): support timestamp in read_callback_.
     return read_callback_->IsVisible(sequence);
@@ -1129,8 +1123,7 @@ void DBIter::SetSavedKeyToSeekTarget(const Slice& target) {
           /*b_has_ts=*/false) < 0) {
     // Seek key is smaller than the lower bound.
     saved_key_.Clear();
-    saved_key_.SetInternalKey(*iterate_lower_bound_, seq, kValueTypeForSeek,
-                              timestamp_ub_);
+    saved_key_.SetInternalKey(*iterate_lower_bound_, seq, kValueTypeForSeek,timestamp_ub_);
   }
 }
 
@@ -1167,8 +1160,8 @@ void DBIter::Seek(const Slice& target) {
   {
     PERF_TIMER_GUARD(seek_internal_seek_time);
 
-    SetSavedKeyToSeekTarget(target);
-    iter_.Seek(saved_key_.GetInternalKey());
+    SetSavedKeyToSeekTarget(target); //这里先设置一下saved_key_，用于seek
+    iter_.Seek(saved_key_.GetInternalKey()); //这里可以看出，iter 接收的是internal key
 
     range_del_agg_.InvalidateRangeDelMapPositions();
     RecordTick(statistics_, NUMBER_DB_SEEK);
@@ -1179,6 +1172,8 @@ void DBIter::Seek(const Slice& target) {
   }
   direction_ = kForward;
 
+  //到这里的时候，inner iterator 已经在target位置处，但是inner iterator是 对inner key进行迭代的，和user key还不一样
+  //需要找到有效的user key 。。因为一些user key可能已经删除，不能直接返回
   // Now the inner iterator is placed to the target position. From there,
   // we need to find out the next key that is visible to the user.
   ClearSavedValue();
@@ -1195,6 +1190,7 @@ void DBIter::Seek(const Slice& target) {
       prefix_.SetUserKey(target_prefix);
     }
   } else {
+  	//找到下一个有效的key
     FindNextUserEntry(false /* not skipping saved_key */, nullptr);
   }
   if (!valid_) {

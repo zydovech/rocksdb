@@ -981,7 +981,7 @@ class DBImpl : public DB {
   // [write_buffer_size * max_write_buffer_number] over all column families
   uint64_t max_total_in_memory_state_;
   // If true, we have only one (default) column family. We use this to optimize
-  // some code-paths
+  // some code-paths 如果是true,则代表只有一个default的column family。。可以对code-path进行优化
   bool single_column_family_mode_;
 
   // The options to access storage files
@@ -1784,6 +1784,7 @@ class DBImpl : public DB {
   // two_write_queues writes, where it can be updated in different threads,
   // read and writes are protected by log_write_mutex_ instead. This is to avoid
   // expesnive mutex_ lock during WAL write, which update log_empty_.
+  //代表的是wal日志是否为空，当往wal写数据的时候，就会改为false
   bool log_empty_;
 
   ColumnFamilyHandleImpl* persist_stats_cf_handle_;
@@ -1796,6 +1797,7 @@ class DBImpl : public DB {
   // reffered by back() without mutex_. With two_write_queues_, writes
   // are protected by locking both mutex_ and log_write_mutex_, and reads must
   // be under either mutex_ or log_write_mutex_.
+  //记录当前活跃的log file
   std::deque<LogFileNumberSize> alive_log_files_;
   // Log files that aren't fully synced, and the current log file.
   // Synchronization:
@@ -1822,6 +1824,7 @@ class DBImpl : public DB {
   // Otherwise only the heaad of write_thread_ can access it.
   WriteBatch cached_recoverable_state_;
   std::atomic<bool> cached_recoverable_state_empty_ = {true};
+  //记录的是当前wal日志大小
   std::atomic<uint64_t> total_log_size_;
 
   // If this is non-empty, we need to delete these log files in background
@@ -1906,7 +1909,7 @@ class DBImpl : public DB {
   // A queue to store log writers to close
   std::deque<log::Writer*> logs_to_free_queue_;
   std::deque<SuperVersion*> superversions_to_free_queue_;
-  int unscheduled_flushes_;
+  int unscheduled_flushes_; //记录了还没有flush的大小
   int unscheduled_compactions_;
 
   // count how many background compactions are running or have been scheduled in
@@ -1920,6 +1923,7 @@ class DBImpl : public DB {
   int num_running_compactions_;
 
   // number of background memtable flush jobs, submitted to the HIGH pool
+  //所有添加到高优先级的线程池的 memtable flush job
   int bg_flush_scheduled_;
 
   // stores the number of flushes are currently running

@@ -112,11 +112,13 @@ Status TableCache::GetTableReader(
       file->Hint(FSRandomAccessFile::kRandom);
     }
     StopWatch sw(ioptions_.env, ioptions_.statistics, TABLE_OPEN_IO_MICROS);
+    //封装，建立RandomAccessFileReader
     std::unique_ptr<RandomAccessFileReader> file_reader(
         new RandomAccessFileReader(
             std::move(file), fname, ioptions_.env,
             record_read_stats ? ioptions_.statistics : nullptr, SST_READ_MICROS,
             file_read_hist, ioptions_.rate_limiter, ioptions_.listeners));
+    //封装，建立TableReader
     s = ioptions_.table_factory->NewTableReader(
         TableReaderOptions(ioptions_, prefix_extractor, file_options,
                            internal_comparator, skip_filters, immortal_tables_,
@@ -156,6 +158,7 @@ Status TableCache::FindTable(const FileOptions& file_options,
       return Status::Incomplete("Table not found in table_cache, no_io is set");
     }
     std::unique_ptr<TableReader> table_reader;
+    //打开文件
     s = GetTableReader(file_options, internal_comparator, fd,
                        false /* sequential mode */, record_read_stats,
                        file_read_hist, &table_reader, prefix_extractor,
@@ -166,6 +169,7 @@ Status TableCache::FindTable(const FileOptions& file_options,
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
     } else {
+    	//这里插入到cache里面，charge是1，代表只占一个容量的位置
       s = cache_->Insert(key, table_reader.get(), 1, &DeleteEntry<TableReader>,
                          handle);
       if (s.ok()) {
@@ -196,7 +200,7 @@ InternalIterator* TableCache::NewIterator(
   bool for_compaction = caller == TableReaderCaller::kCompaction;
   auto& fd = file_meta.fd;
   table_reader = fd.table_reader;
-  if (table_reader == nullptr) {
+  if (table_reader == nullptr) {//该fd还没有 读取，则进行find_table操作
     s = FindTable(file_options, icomparator, fd, &handle, prefix_extractor,
                   options.read_tier == kBlockCacheTier /* no_io */,
                   !for_compaction /* record_read_stats */, file_read_hist,
@@ -211,6 +215,7 @@ InternalIterator* TableCache::NewIterator(
         !options.table_filter(*table_reader->GetTableProperties())) {
       result = NewEmptyInternalIterator<Slice>(arena);
     } else {
+
       result = table_reader->NewIterator(options, prefix_extractor, arena,
                                    skip_filters, caller,
                                    file_options.compaction_readahead_size);

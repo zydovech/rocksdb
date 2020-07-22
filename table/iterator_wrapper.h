@@ -18,6 +18,7 @@ namespace ROCKSDB_NAMESPACE {
 
 // A internal wrapper class with an interface similar to Iterator that caches
 // the valid() and key() results for an underlying iterator.
+//IteratorWrapperBase 提供了和Iterator差不多的接口，对valid和key进行了缓存
 // This can help avoid virtual function calls and also gives better
 // cache locality.
 template <class TValue = Slice>
@@ -83,7 +84,7 @@ class IteratorWrapperBase {
   void Seek(const Slice& k) {
     assert(iter_);
     iter_->Seek(k);
-    Update();
+    Update(); //更新valid
   }
   void SeekForPrev(const Slice& k) {
     assert(iter_);
@@ -133,9 +134,11 @@ class IteratorWrapperBase {
       result_.may_be_out_of_upper_bound = true;
     }
   }
-
+  //底层的iter
   InternalIteratorBase<TValue>* iter_;
+  //结果的缓存
   IterateResult result_;
+  //当前迭代器是否有效
   bool valid_;
 };
 

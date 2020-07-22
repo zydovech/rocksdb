@@ -62,7 +62,7 @@ class BlockHandle {
 
   static const BlockHandle& NullBlockHandle() { return kNullBlockHandle; }
 
-  // Maximum encoding length of a BlockHandle
+  // Maximum encoding length of a BlockHandle 一个handler最大可以序列化的字节数，就是5个字节
   enum { kMaxEncodedLength = 10 + 10 };
 
  private:
@@ -122,6 +122,7 @@ inline bool BlockBasedTableSupportedVersion(uint32_t version) {
 
 // Footer encapsulates the fixed information stored at the tail
 // end of every table file.
+//把固定的信息封装在文件的尾部
 class Footer {
  public:
   // Constructs a footer without specifying its table magic number.
@@ -211,7 +212,7 @@ Status ReadFooterFromFile(RandomAccessFileReader* file,
                           uint64_t file_size, Footer* footer,
                           uint64_t enforce_table_magic_number = 0);
 
-// 1-byte type + 32-bit crc
+// 1-byte type + 32-bit crc 每个block尾部的数据，一个表示是否采用了压缩，另外四个字节表示crc信息
 static const size_t kBlockTrailerSize = 5;
 
 // Make block size calculation for IO less error prone

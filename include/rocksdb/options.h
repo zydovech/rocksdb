@@ -1411,7 +1411,7 @@ struct WriteOptions {
 
 // Options that control flush operations
 struct FlushOptions {
-  // If true, the flush will wait until the flush is done.
+  // If true, the flush will wait until the flush is done. 如果是true的话，则刷新到磁盘
   // Default: true
   bool wait;
   // If true, the flush would proceed immediately even it means writes will

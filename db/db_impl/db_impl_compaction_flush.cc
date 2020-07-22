@@ -651,9 +651,12 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
   if (options.target_path_id >= cfd->ioptions()->cf_paths.size()) {
     return Status::InvalidArgument("Invalid target path ID");
   }
-
+  //flush就是把memtable里的数据，给弄到磁盘里面
   bool flush_needed = true;
   if (begin != nullptr && end != nullptr) {
+  	//如果开始和结束都不为空，则判断当前memtable 以及imm里的数据是否有重叠，来决定是否需要flush。。
+  	//compaction 是对不同的level之间进行的。flush是指把memtable刷到磁盘。。
+  	//如果有重叠，则必须把memtable刷新到磁盘，这样才能进行compaction
     // TODO(ajkr): We could also optimize away the flush in certain cases where
     // one/both sides of the interval are unbounded. But it requires more
     // changes to RangesOverlapWithMemtables.
@@ -675,6 +678,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
       s = AtomicFlushMemTables(cfds, fo, FlushReason::kManualCompaction,
                                false /* writes_stopped */);
     } else {
+    	//需要的话，则flush memtable。。这里会等待，直到刷盘结束
       s = FlushMemTable(cfd, fo, FlushReason::kManualCompaction,
                         false /* writes_stopped*/);
     }
@@ -699,6 +703,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
                             final_output_level, options, begin, end, exclusive,
                             false, port::kMaxUint64);
   } else {
+  	//下面分别记录了第一个有重叠的level
     int first_overlapped_level = kInvalidLevel;
     int max_overlapped_level = kInvalidLevel;
     {
@@ -1568,6 +1573,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
     WaitForPendingWrites();
 
     if (!cfd->mem()->IsEmpty() || !cached_recoverable_state_empty_.load()) {
+    	//之前的memtable有数据，则变换memtable。把之前的加入到imm里
       s = SwitchMemtable(cfd, &context);
     }
     if (s.ok()) {
@@ -1873,6 +1879,7 @@ Status DBImpl::WaitForFlushMemTables(
     }
     // Column families involved in this flush request have either been dropped
     // or finished flush. Then it's time to finish waiting.
+    //所有的cf都已经操作完毕
     if (num_dropped + num_finished == num) {
       break;
     }
@@ -1909,6 +1916,7 @@ void DBImpl::EnableManualCompaction() {
   manual_compaction_paused_.store(false, std::memory_order_release);
 }
 
+//可能需要flush 或者进行compaction
 void DBImpl::MaybeScheduleFlushOrCompaction() {
   mutex_.AssertHeld();
   if (!opened_successfully_) {
@@ -1931,12 +1939,15 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
   auto bg_job_limits = GetBGJobLimits();
   bool is_flush_pool_empty =
       env_->GetBackgroundThreads(Env::Priority::HIGH) == 0;
+
+  //看是否需要进行flush
   while (!is_flush_pool_empty && unscheduled_flushes_ > 0 &&
-         bg_flush_scheduled_ < bg_job_limits.max_flushes) {
+         bg_flush_scheduled_ < bg_job_limits.max_flushes) {//没有达到限制，则添加后台任务
     bg_flush_scheduled_++;
     FlushThreadArg* fta = new FlushThreadArg;
     fta->db_ = this;
     fta->thread_pri_ = Env::Priority::HIGH;
+    //添加flush任务。。优先级是HIGH
     env_->Schedule(&DBImpl::BGWorkFlush, fta, Env::Priority::HIGH, this,
                    &DBImpl::UnscheduleFlushCallback);
     --unscheduled_flushes_;
@@ -1947,6 +1958,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
 
   // special case -- if high-pri (flush) thread pool is empty, then schedule
   // flushes in low-pri (compaction) thread pool.
+  //如果高优先级的线程池是空的，则调度flush到低优先级的线程池里
   if (is_flush_pool_empty) {
     while (unscheduled_flushes_ > 0 &&
            bg_flush_scheduled_ + bg_compaction_scheduled_ <
@@ -1978,7 +1990,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
     TEST_SYNC_POINT("DBImpl::MaybeScheduleFlushOrCompaction:Conflict");
     return;
   }
-
+  //查看是否需要进行compaction
   while (bg_compaction_scheduled_ < bg_job_limits.max_compactions &&
          unscheduled_compactions_ > 0) {
     CompactionArg* ca = new CompactionArg;
@@ -2071,7 +2083,7 @@ ColumnFamilyData* DBImpl::PickCompactionFromQueue(
   }
   return cfd;
 }
-
+//把当前cf加到flush列表里面
 void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
                                   FlushReason flush_reason) {
   if (flush_req.empty()) {
@@ -2083,6 +2095,7 @@ void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
     cfd->SetFlushReason(flush_reason);
   }
   ++unscheduled_flushes_;
+  //加入到flush_queue
   flush_queue_.push_back(flush_req);
 }
 

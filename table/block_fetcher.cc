@@ -197,6 +197,7 @@ inline void BlockFetcher::GetBlockContents() {
 Status BlockFetcher::ReadBlockContents() {
   block_size_ = static_cast<size_t>(handle_.size());
 
+  //先尝试从persistent cache里面获取没有压缩的block
   if (TryGetUncompressBlockFromPersistentCache()) {
     compression_type_ = kNoCompression;
 #ifndef NDEBUG
@@ -204,6 +205,8 @@ Status BlockFetcher::ReadBlockContents() {
 #endif  // NDEBUG
     return Status::OK();
   }
+
+  //尝试从prefetch里获取
   if (TryGetFromPrefetchBuffer()) {
     if (!status_.ok()) {
       return status_;
@@ -214,10 +217,11 @@ Status BlockFetcher::ReadBlockContents() {
 
     {
       PERF_TIMER_GUARD(block_read_time);
-      // Actual file read
+      // Actual file read 从文件中读取
       status_ = file_->Read(handle_.offset(), block_size_ + kBlockTrailerSize,
                             &slice_, used_buf_, nullptr, for_compaction_);
     }
+    //记录block read 的次数
     PERF_COUNTER_ADD(block_read_count, 1);
 
     // TODO: introduce dedicated perf counter for range tombstones
@@ -243,7 +247,7 @@ Status BlockFetcher::ReadBlockContents() {
     if (!status_.ok()) {
       return status_;
     }
-
+    //读取到的数据不太对，不符合一个block的格式
     if (slice_.size() != block_size_ + kBlockTrailerSize) {
       return Status::Corruption("truncated block read from " +
                                 file_->file_name() + " offset " +
@@ -261,8 +265,9 @@ Status BlockFetcher::ReadBlockContents() {
   }
 
   PERF_TIMER_GUARD(block_decompress_time);
-
+  //从block的尾部获取压缩类型
   compression_type_ = get_block_compression_type(slice_.data(), block_size_);
+
 
   if (do_uncompress_ && compression_type_ != kNoCompression) {
     // compressed page, uncompress, update cache

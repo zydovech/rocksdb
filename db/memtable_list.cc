@@ -101,7 +101,7 @@ int MemTableList::NumFlushed() const {
 }
 
 // Search all the memtables starting from the most recent one.
-// Return the most recent value found, if any.
+// Return the most recent value found, if any. 挨个搜索memtable。。因为
 // Operands stores the list of merge operations to apply, so far.
 bool MemTableListVersion::Get(const LookupKey& key, std::string* value,
                               std::string* timestamp, Status* s,
@@ -207,12 +207,11 @@ void MemTableListVersion::AddIterators(
     iterator_list->push_back(m->NewIterator(options, arena));
   }
 }
-
+//相当于把imm 里面所有的memtable,都添加到迭代器里面
 void MemTableListVersion::AddIterators(
     const ReadOptions& options, MergeIteratorBuilder* merge_iter_builder) {
   for (auto& m : memlist_) {
-    merge_iter_builder->AddIterator(
-        m->NewIterator(options, merge_iter_builder->GetArena()));
+    merge_iter_builder->AddIterator(m->NewIterator(options, merge_iter_builder->GetArena()));
   }
 }
 

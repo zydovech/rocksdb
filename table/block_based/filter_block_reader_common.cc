@@ -8,7 +8,7 @@
 #include "monitoring/perf_context_imp.h"
 #include "table/block_based/block_based_table_reader.h"
 #include "table/block_based/parsed_full_filter_block.h"
-
+#include <iostream>
 namespace ROCKSDB_NAMESPACE {
 
 template <typename TBlocklike>
@@ -68,7 +68,7 @@ Status FilterBlockReaderCommon<TBlocklike>::GetOrReadFilterBlock(
     BlockCacheLookupContext* lookup_context,
     CachableEntry<TBlocklike>* filter_block) const {
   assert(filter_block);
-
+  //这里的是两个变量，filter_block_ 是类变量。。然后filter_block是传递进来的变量
   if (!filter_block_.IsEmpty()) {
     filter_block->SetUnownedValue(filter_block_.GetValue());
     return Status::OK();

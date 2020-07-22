@@ -410,6 +410,7 @@ Status ReadTableProperties(RandomAccessFileReader* file, uint64_t file_size,
   return s;
 }
 
+//meta block 的格式是 name: (offset,size)
 Status FindMetaBlock(InternalIterator* meta_index_iter,
                      const std::string& meta_block_name,
                      BlockHandle* block_handle) {

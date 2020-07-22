@@ -152,6 +152,13 @@ namespace {
 // On success fill *result and return OK - caller owns *result
 // @param uncompression_dict Data for presetting the compression library's
 //    dictionary.
+//从file中读取 由handler定义的block
+/*
+ * file :要读取的文件
+ * footer ： footer信息
+ * handler :定义了要读取的block的offset和size
+ *
+ * */
 template <typename TBlocklike>
 Status ReadBlockFromFile(
     RandomAccessFileReader* file, FilePrefetchBuffer* prefetch_buffer,
@@ -169,6 +176,7 @@ Status ReadBlockFromFile(
       file, prefetch_buffer, footer, options, handle, &contents, ioptions,
       do_uncompress, maybe_compressed, block_type, uncompression_dict,
       cache_options, memory_allocator, nullptr, for_compaction);
+
   Status s = block_fetcher.ReadBlockContents();
   if (s.ok()) {
     result->reset(BlocklikeTraits<TBlocklike>::Create(
@@ -586,6 +594,7 @@ Status BlockBasedTable::Open(
   const bool preload_all = !table_options.cache_index_and_filter_blocks;
 
   if (!ioptions.allow_mmap_reads) {
+  	//这个只是利用文件系统的readahead
     s = PrefetchTail(file.get(), file_size, tail_prefetch_stats, prefetch_all,
                      preload_all, &prefetch_buffer);
   } else {
@@ -646,9 +655,11 @@ Status BlockBasedTable::Open(
   // meta-block reads.
   rep->compression_dict_handle = BlockHandle::NullBlockHandle();
 
-  // Read metaindex
+  // Read metaindex 对meta block 的index
+  //meta block的索引都是 name:(offset+size)的形式
   std::unique_ptr<Block> metaindex;
   std::unique_ptr<InternalIterator> metaindex_iter;
+  //读取metaindex block
   s = new_table->ReadMetaIndexBlock(prefetch_buffer.get(), &metaindex,
                                     &metaindex_iter);
   if (!s.ok()) {
@@ -667,6 +678,7 @@ Status BlockBasedTable::Open(
   if (!s.ok()) {
     return s;
   }
+  //提前读取index和filter blocks
   s = new_table->PrefetchIndexAndFilterBlocks(
       prefetch_buffer.get(), metaindex_iter.get(), new_table.get(),
       prefetch_all, table_options, level, &lookup_context);
@@ -686,6 +698,7 @@ Status BlockBasedTable::Open(
   return s;
 }
 
+//预先加载尾部数据
 Status BlockBasedTable::PrefetchTail(
     RandomAccessFileReader* file, uint64_t file_size,
     TailPrefetchStats* tail_prefetch_stats, const bool prefetch_all,
@@ -719,9 +732,10 @@ Status BlockBasedTable::PrefetchTail(
                            &tail_prefetch_size);
   Status s;
   // TODO should not have this special logic in the future.
-  if (!file->use_direct_io()) {
+  if (!file->use_direct_io()) {//如果不是使用直接io的，直接加载到page cache就行
     prefetch_buffer->reset(new FilePrefetchBuffer(
         nullptr, 0, 0, false /* enable */, true /* track_min_offset */));
+    //这里只是预先加载到page cache里面
     s = file->Prefetch(prefetch_off, prefetch_len);
   } else {
     prefetch_buffer->reset(new FilePrefetchBuffer(
@@ -925,8 +939,12 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
         default:
           assert(0);
       }
+      //filter meta  block的格式 filter.Name : (offset,size)
+
       std::string filter_block_key = prefix;
+
       filter_block_key.append(rep_->filter_policy->Name());
+
       if (FindMetaBlock(meta_iter, filter_block_key, &rep_->filter_handle)
               .ok()) {
         rep_->filter_type = filter_type;
@@ -1206,6 +1224,7 @@ Status BlockBasedTable::PutDataBlockToCache(
       block_type == BlockType::kData
           ? rep_->table_options.read_amp_bytes_per_bit
           : 0;
+  //优先级 有个配置选项可以设置
   const Cache::Priority priority =
       rep_->table_options.cache_index_and_filter_blocks_with_high_priority &&
               (block_type == BlockType::kFilter ||
@@ -1397,6 +1416,7 @@ Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
   if (block_cache != nullptr || block_cache_compressed != nullptr) {
     // create key for block cache
     if (block_cache != nullptr) {
+
       key = GetCacheKey(rep_->cache_key_prefix, rep_->cache_key_prefix_size,
                         handle, cache_key);
     }
@@ -1419,7 +1439,7 @@ Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
     }
 
     // Can't find the block from the cache. If I/O is allowed, read from the
-    // file.
+    // file. 从block cache 里面找不到，如果允许进行io操作，则从文件中读取
     if (block_entry->GetValue() == nullptr && !no_io && ro.fill_cache) {
       Statistics* statistics = rep_->ioptions.statistics;
       const bool maybe_compressed =
@@ -2038,14 +2058,10 @@ InternalIterator* BlockBasedTable::NewIterator(
         need_upper_bound_check, prefix_extractor, BlockType::kData, caller,
         compaction_readahead_size);
   } else {
-    auto* mem =
-        arena->AllocateAligned(sizeof(BlockBasedTableIterator<DataBlockIter>));
+    auto* mem =arena->AllocateAligned(sizeof(BlockBasedTableIterator<DataBlockIter>));
     return new (mem) BlockBasedTableIterator<DataBlockIter>(
         this, read_options, rep_->internal_comparator,
-        NewIndexIterator(
-            read_options,
-            need_upper_bound_check &&
-                rep_->index_type == BlockBasedTableOptions::kHashSearch,
+        NewIndexIterator(read_options,need_upper_bound_check && rep_->index_type == BlockBasedTableOptions::kHashSearch,
             /*input_iter=*/nullptr, /*get_context=*/nullptr, &lookup_context),
         !skip_filters && !read_options.total_order_seek &&
             prefix_extractor != nullptr,
@@ -2072,7 +2088,9 @@ bool BlockBasedTable::FullFilterKeyMayMatch(
     const Slice& internal_key, const bool no_io,
     const SliceTransform* prefix_extractor, GetContext* get_context,
     BlockCacheLookupContext* lookup_context) const {
+
   if (filter == nullptr || filter->IsBlockBased()) {
+  	//如果
     return true;
   }
   Slice user_key = ExtractUserKey(internal_key);
@@ -2130,6 +2148,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
   Status s;
   const bool no_io = read_options.read_tier == kBlockCacheTier;
 
+  //布隆过滤器
   FilterBlockReader* const filter =
       !skip_filters ? rep_->filter.get() : nullptr;
 
@@ -2146,8 +2165,9 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
         read_options.snapshot != nullptr;
   }
   const bool may_match =
-      FullFilterKeyMayMatch(read_options, filter, key, no_io, prefix_extractor,
-                            get_context, &lookup_context);
+      FullFilterKeyMayMatch(read_options, filter, key, no_io, prefix_extractor,get_context, &lookup_context);
+
+  //布隆过滤器的原则就是，没有则肯定没有。。
   if (!may_match) {
     RecordTick(rep_->ioptions.statistics, BLOOM_FILTER_USEFUL);
     PERF_COUNTER_BY_LEVEL_ADD(bloom_filter_useful, 1, rep_->level);
@@ -2169,9 +2189,9 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
     }
 
     size_t ts_sz =
-        rep_->internal_comparator.user_comparator()->timestamp_size();
-    bool matched = false;  // if such user key mathced a key in SST
-    bool done = false;
+			rep_->internal_comparator.user_comparator()->timestamp_size();
+		bool matched = false;  // if such user key mathced a key in SST
+		bool done = false;
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       IndexValue v = iiter->value();
 
@@ -2210,7 +2230,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
       NewDataBlockIterator<DataBlockIter>(
           read_options, v.handle, &biter, BlockType::kData, get_context,
           &lookup_data_block_context,
-          /*s=*/Status(), /*prefetch_buffer*/ nullptr);
+          /*s=*/Status(), /*prefetch_buffer*/ nullptr); //这个里面会retrieve block，然后找block cache
 
       if (no_io && biter.status().IsIncomplete()) {
         // couldn't get block from block_cache

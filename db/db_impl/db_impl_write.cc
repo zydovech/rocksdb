@@ -864,7 +864,7 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
     WaitForPendingWrites();
     status = SwitchWAL(write_context);
   }
-
+  //判断memtable是否写满了
   if (UNLIKELY(status.ok() && write_buffer_manager_->ShouldFlush())) {
     // Before a new memtable is added in SwitchMemtable(),
     // write_buffer_manager_->ShouldFlush() will keep returning true. If another
@@ -1242,6 +1242,8 @@ Status DBImpl::SwitchWAL(WriteContext* write_context) {
       oldest_alive_log, total_log_size_.load(), GetMaxTotalWalSize());
   // no need to refcount because drop is happening in write thread, so can't
   // happen while we're in the write thread
+
+  //收集所有cf里面。最旧的日志小于当前oldest_alive_log的cf
   autovector<ColumnFamilyData*> cfds;
   if (immutable_db_options_.atomic_flush) {
     SelectColumnFamiliesForAtomicFlush(&cfds);
@@ -1287,7 +1289,7 @@ Status DBImpl::SwitchWAL(WriteContext* write_context) {
   }
   return status;
 }
-
+//处理memtable 写满的情况
 Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
   mutex_.AssertHeld();
   assert(write_context != nullptr);
@@ -1356,7 +1358,7 @@ Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
     if (immutable_db_options_.atomic_flush) {
       AssignAtomicFlushSeq(cfds);
     }
-    for (const auto cfd : cfds) {
+    for (const auto cfd : cfds) {//设置flush
       cfd->imm()->FlushRequested();
     }
     FlushRequest flush_req;
@@ -1631,6 +1633,8 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   if (two_write_queues_) {
     log_write_mutex_.Lock();
   }
+  //在switch memtable的时候，如果之前的wal日志不为空的话，则创建新的wal日志。但是为啥呢？
+  //
   bool creating_new_log = !log_empty_;
   if (two_write_queues_) {
     log_write_mutex_.Unlock();
@@ -1640,6 +1644,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
       !log_recycle_files_.empty()) {
     recycle_log_number = log_recycle_files_.front();
   }
+  //新的log number
   uint64_t new_log_number =
       creating_new_log ? versions_->NewFileNumber() : logfile_number_;
   const MutableCFOptions mutable_cf_options = *cfd->GetLatestMutableCFOptions();
@@ -1656,6 +1661,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   // Log this later after lock release. It may be outdated, e.g., if background
   // flush happens before logging, but that should be ok.
   int num_imm_unflushed = cfd->imm()->NumNotFlushed();
+  //预先申请的block大小
   const auto preallocate_block_size =
       GetWalPreallocateBlockSize(mutable_cf_options.write_buffer_size);
   mutex_.Unlock();
@@ -1688,6 +1694,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
     assert(new_log != nullptr);
     if (!logs_.empty()) {
       // Alway flush the buffer of the last log before switching to a new one
+      //总是把最旧的给刷新到磁盘
       log::Writer* cur_log_writer = logs_.back().writer;
       s = cur_log_writer->WriteBuffer();
       if (!s.ok()) {
@@ -1745,6 +1752,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   }
 
   cfd->mem()->SetNextLogNumber(logfile_number_);
+  //加入到imm里面去
   cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
   new_mem->Ref();
   cfd->SetMemtable(new_mem);
@@ -1760,6 +1768,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   return s;
 }
 
+//计算wal日志预先要申请的block大小
 size_t DBImpl::GetWalPreallocateBlockSize(uint64_t write_buffer_size) const {
   mutex_.AssertHeld();
   size_t bsize =

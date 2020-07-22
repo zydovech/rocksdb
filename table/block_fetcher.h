@@ -14,7 +14,7 @@
 #include "table/format.h"
 
 namespace ROCKSDB_NAMESPACE {
-
+//从file里面读取单个block..利用prefetch buffer 或者	persistent cache，来避免从文件中读取
 // Retrieves a single block of a given file. Utilizes the prefetch buffer and/or
 // persistent cache provided (if any) to try to avoid reading from the file
 // directly. Note that both the prefetch buffer and the persistent cache are
@@ -26,6 +26,7 @@ namespace ROCKSDB_NAMESPACE {
 // if provided, to prime the compression algorithm), and returns the resulting
 // uncompressed block data. Otherwise, it returns the original block.
 //
+//如果verify_checksums 是true。 则会检验checksum。。如果fill_cache为true的话，则会填充persistent cache
 // Two read options affect the behavior of BlockFetcher: if verify_checksums is
 // true, the checksum of the (original) block is checked; if fill_cache is true,
 // the block is added to the persistent cache if needed.
@@ -68,8 +69,8 @@ class BlockFetcher {
  private:
   static const uint32_t kDefaultStackBufferSize = 5000;
 
-  RandomAccessFileReader* file_;
-  FilePrefetchBuffer* prefetch_buffer_;
+  RandomAccessFileReader* file_; //底层文件
+  FilePrefetchBuffer* prefetch_buffer_; //prefetch_buffer
   const Footer& footer_;
   const ReadOptions read_options_;
   const BlockHandle& handle_;

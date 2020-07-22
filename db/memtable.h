@@ -499,7 +499,7 @@ class MemTable {
   std::vector<port::RWMutex> locks_;
 
   const SliceTransform* const prefix_extractor_;
-  std::unique_ptr<DynamicBloom> bloom_filter_;
+  std::unique_ptr<DynamicBloom> bloom_filter_; //属于特定的memtable的
 
   std::atomic<FlushStateEnum> flush_state_;
 

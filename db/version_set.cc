@@ -1021,7 +1021,7 @@ class LevelIterator final : public InternalIterator {
   size_t file_index_;
   int level_;
   RangeDelAggregator* range_del_agg_;
-  IteratorWrapper file_iter_;  // May be nullptr
+  IteratorWrapper file_iter_;  // May be nullptr 对iter的包装
   PinnedIteratorsManager* pinned_iters_mgr_;
 
   // To be propagated to RangeDelAggregator in order to safely truncate range
@@ -1034,22 +1034,21 @@ void LevelIterator::Seek(const Slice& target) {
   bool need_to_reseek = true;
   if (file_iter_.iter() != nullptr && file_index_ < flevel_->num_files) {
     const FdWithKeyRange& cur_file = flevel_->files[file_index_];
-    if (icomparator_.InternalKeyComparator::Compare(
-            target, cur_file.largest_key) <= 0 &&
-        icomparator_.InternalKeyComparator::Compare(
-            target, cur_file.smallest_key) >= 0) {
-      need_to_reseek = false;
-      assert(static_cast<size_t>(FindFile(icomparator_, *flevel_, target)) ==
-             file_index_);
+    if (icomparator_.InternalKeyComparator::Compare(target, cur_file.largest_key) <= 0 &&
+        icomparator_.InternalKeyComparator::Compare(target, cur_file.smallest_key) >= 0) {
+    	//当前文件的iter，是正确的
+      need_to_reseek = false; //不需要重新reseek
+      assert(static_cast<size_t>(FindFile(icomparator_, *flevel_, target)) == file_index_);
     }
   }
   if (need_to_reseek) {
     TEST_SYNC_POINT("LevelIterator::Seek:BeforeFindFile");
+    //找到包含target的文件
     size_t new_file_index = FindFile(icomparator_, *flevel_, target);
     InitFileIterator(new_file_index);
   }
 
-  if (file_iter_.iter() != nullptr) {
+  if (file_iter_.iter() != nullptr) {//有对应的文件，则进行seek
     file_iter_.Seek(target);
   }
   if (SkipEmptyFileForward() && prefix_extractor_ != nullptr &&
@@ -1186,7 +1185,7 @@ void LevelIterator::SetFileIterator(InternalIterator* iter) {
 }
 
 void LevelIterator::InitFileIterator(size_t new_file_index) {
-  if (new_file_index >= flevel_->num_files) {
+  if (new_file_index >= flevel_->num_files) { //如果没找到，则设置为null
     file_index_ = new_file_index;
     SetFileIterator(nullptr);
     return;
@@ -1201,6 +1200,8 @@ void LevelIterator::InitFileIterator(size_t new_file_index) {
       // no need to change anything
     } else {
       file_index_ = new_file_index;
+      //最终还是调用table_cache_->NewIterator 创建一个table iterator( 也是two level的， index --> block)
+      //和level 0 的就一样了
       InternalIterator* iter = NewFileIterator();
       SetFileIterator(iter);
     }
@@ -1557,7 +1558,7 @@ double VersionStorageInfo::GetEstimatedCompressionRatioAtLevel(
   return static_cast<double>(sum_data_size_bytes) / sum_file_size_bytes;
 }
 
-//添加迭代器
+//添加不同level的迭代器
 void Version::AddIterators(const ReadOptions& read_options,
                            const FileOptions& soptions,
                            MergeIteratorBuilder* merge_iter_builder,
@@ -1565,8 +1566,7 @@ void Version::AddIterators(const ReadOptions& read_options,
   assert(storage_info_.finalized_);
 
   for (int level = 0; level < storage_info_.num_non_empty_levels(); level++) {
-    AddIteratorsForLevel(read_options, soptions, merge_iter_builder, level,
-                         range_del_agg);
+    AddIteratorsForLevel(read_options, soptions, merge_iter_builder, level,range_del_agg);
   }
 }
 
@@ -1576,6 +1576,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
                                    int level,
                                    RangeDelAggregator* range_del_agg) {
   assert(storage_info_.finalized_);
+
   if (level >= storage_info_.num_non_empty_levels()) {
     // This is an empty level
     return;
@@ -1589,6 +1590,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
   auto* arena = merge_iter_builder->GetArena();
   if (level == 0) {
     // Merge all level zero files together since they may overlap
+    //由于level0 文件之间有重叠，所以每个文件都有一个迭代器
     for (size_t i = 0; i < storage_info_.LevelFilesBrief(0).num_files; i++) {
       const auto& file = storage_info_.LevelFilesBrief(0).files[i];
       merge_iter_builder->AddIterator(cfd_->table_cache()->NewIterator(
@@ -1800,6 +1802,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
       storage_info_.files_, user_key, ikey, &storage_info_.level_files_brief_,
       storage_info_.num_non_empty_levels_, &storage_info_.file_indexer_,
       user_comparator(), internal_comparator());
+  //找一个和user_key 有重合的文件
   FdWithKeyRange* f = fp.GetNextFile();
 
   while (f != nullptr) {

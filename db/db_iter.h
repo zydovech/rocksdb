@@ -141,11 +141,12 @@ class DBIter final : public Iterator {
   ReadRangeDelAggregator* GetRangeDelAggregator() { return &range_del_agg_; }
 
   bool Valid() const override { return valid_; }
-  Slice key() const override {
+  Slice key() const override { //key 返回的就是saved_key 里面的内容。。不过要转换为user_key
     assert(valid_);
     if (start_seqnum_ > 0) {
       return saved_key_.GetInternalKey();
     } else {
+    	//返回user_key
       const Slice ukey_and_ts = saved_key_.GetUserKey();
       return Slice(ukey_and_ts.data(), ukey_and_ts.size() - timestamp_size_);
     }
@@ -281,11 +282,11 @@ class DBIter final : public Iterator {
   // uncommitted data in db as in WriteUnCommitted.
   SequenceNumber sequence_;
 
-  IterKey saved_key_;
+  IterKey saved_key_; //保存的key
   // Reusable internal key data structure. This is only used inside one function
   // and should not be used across functions. Reusing this object can reduce
   // overhead of calling construction of the function if creating it each time.
-  ParsedInternalKey ikey_;
+  ParsedInternalKey ikey_; //解析内部迭代器返回的key
   std::string saved_value_;
   Slice pinned_value_;
   // for prefix seek mode to support prev()
@@ -293,7 +294,7 @@ class DBIter final : public Iterator {
   uint64_t max_skip_;
   uint64_t max_skippable_internal_keys_;
   uint64_t num_internal_keys_skipped_;
-  const Slice* iterate_lower_bound_;
+  const Slice* iterate_lower_bound_; //这个迭代器 的下限，
   const Slice* iterate_upper_bound_;
 
   // The prefix of the seek key. It is only used when prefix_same_as_start_
@@ -306,7 +307,7 @@ class DBIter final : public Iterator {
   Status status_;
   Direction direction_;
   bool valid_;
-  bool current_entry_is_merged_;
+  bool current_entry_is_merged_; //遇到kTypeMerge 的key的时候，会设置为true，现在还不知道应用场景
   // True if we know that the current entry's seqnum is 0.
   // This information is used as that the next entry will be for another
   // user key.
@@ -336,6 +337,7 @@ class DBIter final : public Iterator {
   ColumnFamilyData* cfd_;
   // for diff snapshots we want the lower bound on the seqnum;
   // if this value > 0 iterator will return internal keys
+  // 如果不为0，会进行过滤，且返回internal_key
   SequenceNumber start_seqnum_;
   const Slice* const timestamp_ub_;
   const size_t timestamp_size_;

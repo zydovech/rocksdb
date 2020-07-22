@@ -28,6 +28,7 @@
 namespace ROCKSDB_NAMESPACE {
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace {
+	//定义的是最小堆和最大堆。
 typedef BinaryHeap<IteratorWrapper*, MaxIteratorComparator> MergerMaxIterHeap;
 typedef BinaryHeap<IteratorWrapper*, MinIteratorComparator> MergerMinIterHeap;
 }  // namespace
@@ -109,9 +110,10 @@ class MergingIterator : public InternalIterator {
   }
 
   void Seek(const Slice& target) override {
+  	//首先是把当前的堆栈给清理了
     ClearHeaps();
     status_ = Status::OK();
-    for (auto& child : children_) {
+    for (auto& child : children_) {//遍历所有的children，然后进行seek
       {
         PERF_TIMER_GUARD(seek_child_seek_time);
         child.Seek(target);
@@ -122,13 +124,13 @@ class MergingIterator : public InternalIterator {
         // Strictly, we timed slightly more than min heap operation,
         // but these operations are very cheap.
         PERF_TIMER_GUARD(seek_min_heap_time);
-        AddToMinHeapOrCheckStatus(&child);
+        AddToMinHeapOrCheckStatus(&child); //把迭代器添加到最小堆里
       }
     }
     direction_ = kForward;
     {
       PERF_TIMER_GUARD(seek_min_heap_time);
-      current_ = CurrentForward();
+      current_ = CurrentForward(); //把最小堆
     }
   }
 
@@ -184,8 +186,9 @@ class MergingIterator : public InternalIterator {
     } else {
       // current stopped being valid, remove it from the heap.
       considerStatus(current_->status());
-      minHeap_.pop();
+      minHeap_.pop(); //这个迭代器已经结束了，则从堆里面删除
     }
+    //重新定义current_
     current_ = CurrentForward();
   }
 
@@ -298,6 +301,7 @@ class MergingIterator : public InternalIterator {
     kReverse
   };
   Direction direction_;
+  //最小堆，当前最小的元素在堆顶
   MergerMinIterHeap minHeap_;
   bool prefix_seek_mode_;
 

@@ -41,8 +41,8 @@ extern uint64_t PackFileNumberAndPathId(uint64_t number, uint64_t path_id);
 // file is not in any live version any more.
 struct FileDescriptor {
   // Table reader in table_reader_handle
-  TableReader* table_reader;
-  //number和path_id的组合，number就是000013.sst 中的13
+  TableReader* table_reader; //一个sst file就是一个table,这个就是对应的table read
+  //number和path_id的组合，number就是000013.sst 中的13  通过mask进行区分
   uint64_t packed_number_and_path_id;
   uint64_t file_size;  // File size in bytes
   SequenceNumber smallest_seqno;  // The smallest seqno in this file
@@ -99,7 +99,7 @@ struct FileMetaData {
   InternalKey smallest;            // Smallest internal key served by table
   InternalKey largest;             // Largest internal key served by table
 
-  // Needs to be disposed when refs becomes 0.
+  // Needs to be disposed when refs becomes 0. 代表读取该table的reader
   Cache::Handle* table_reader_handle = nullptr;
 
   FileSampledStats stats;

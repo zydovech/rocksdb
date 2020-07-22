@@ -1125,7 +1125,7 @@ class VersionSet {
   const std::string dbname_;
   std::string db_id_;
   const ImmutableDBOptions* const db_options_;
-  //下个sst file的数字，sst file的文件名是000013.sst
+  //下一个文件的数字，wal文件和sst文件都是用的这个。。所以wal和log文件的名字是不重复的？
   std::atomic<uint64_t> next_file_number_;
   // Any log number equal or lower than this should be ignored during recovery,
   // and is qualified for being deleted in 2PC mode. In non-2PC mode, this

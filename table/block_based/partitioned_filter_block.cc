@@ -250,9 +250,10 @@ bool PartitionedFilterBlockReader::MayMatch(
     uint64_t block_offset, bool no_io, const Slice* const_ikey_ptr,
     GetContext* get_context, BlockCacheLookupContext* lookup_context,
     FilterFunction filter_function) const {
-  CachableEntry<Block> filter_block;
-  Status s =
-      GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
+
+	CachableEntry<Block> filter_block;
+
+  Status s =GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
   if (UNLIKELY(!s.ok())) {
     return true;
   }

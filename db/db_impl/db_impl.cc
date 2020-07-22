@@ -233,6 +233,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   // Give a large number for setting of "infinite" open files.
+  //计算table_cache的大小，由max_open_files决定。。
   const int table_cache_size = (mutable_db_options_.max_open_files == -1)
                                    ? TableCache::kInfiniteCapacity
                                    : mutable_db_options_.max_open_files - 10;
@@ -1445,9 +1446,9 @@ InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
       &cfd->internal_comparator(), arena,
       !read_options.total_order_seek &&
           super_version->mutable_cf_options.prefix_extractor != nullptr);
+
   // Collect iterator for mutable mem 添加memtable iterator
-  merge_iter_builder.AddIterator(
-      super_version->mem->NewIterator(read_options, arena));
+  merge_iter_builder.AddIterator(super_version->mem->NewIterator(read_options, arena));
 
   std::unique_ptr<FragmentedRangeTombstoneIterator> range_del_iter;
   Status s;
@@ -1475,8 +1476,7 @@ InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
                                            &merge_iter_builder, range_del_agg);
     }
     internal_iter = merge_iter_builder.Finish();
-    IterState* cleanup =
-        new IterState(this, &mutex_, super_version,
+    IterState* cleanup =new IterState(this, &mutex_, super_version,
                       read_options.background_purge_on_iterator_cleanup ||
                       immutable_db_options_.avoid_unnecessary_blocking_io);
     internal_iter->RegisterCleanup(CleanupIteratorState, cleanup, nullptr);
@@ -1615,6 +1615,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
                               &max_covering_tombstone_seq, read_options,
                               get_impl_options.callback,
                               get_impl_options.is_blob_index)) {
+      	//挨个查找memtable list里面的数据，按照从新到旧的顺序。。
         done = true;
         get_impl_options.value->PinSelf();
         RecordTick(stats_, MEMTABLE_HIT);
@@ -1640,7 +1641,9 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       return s;
     }
   }
+
   if (!done) {
+  	//走到这里，代表memtable 和imm里面都没有找到
     PERF_TIMER_GUARD(get_from_output_files_time);
     sv->current->Get(
         read_options, lkey, get_impl_options.value, timestamp, &s,
@@ -2590,9 +2593,7 @@ ArenaWrappedDBIter* DBImpl::NewIteratorImpl(const ReadOptions& read_options,
       sv->version_number, read_callback, this, cfd, allow_blob,
       read_options.snapshot != nullptr ? false : allow_refresh);
 
-  InternalIterator* internal_iter =
-      NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),
-                          db_iter->GetRangeDelAggregator(), snapshot);
+  InternalIterator* internal_iter =NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),db_iter->GetRangeDelAggregator(), snapshot);
   db_iter->SetIterUnderDBIter(internal_iter);
 
   return db_iter;

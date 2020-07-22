@@ -9,7 +9,7 @@
 
 #include "table/block_based/block_based_filter_block.h"
 #include <algorithm>
-
+#include <iostream>
 #include "db/dbformat.h"
 #include "monitoring/perf_context_imp.h"
 #include "rocksdb/filter_policy.h"
@@ -179,7 +179,7 @@ std::unique_ptr<FilterBlockReader> BlockBasedFilterBlockReader::Create(
   assert(!pin || prefetch);
 
   CachableEntry<BlockContents> filter_block;
-  if (prefetch || !use_cache) {
+  if (prefetch || !use_cache) { //不使用use_cache才会 read filter block
     const Status s = ReadFilterBlock(table, prefetch_buffer, ReadOptions(),
                                      use_cache, nullptr /* get_context */,
                                      lookup_context, &filter_block);
@@ -187,7 +187,7 @@ std::unique_ptr<FilterBlockReader> BlockBasedFilterBlockReader::Create(
       return std::unique_ptr<FilterBlockReader>();
     }
 
-    if (use_cache && !pin) {
+    if (use_cache && !pin) { //这里如果use_cache为true，但是不保持在内存中，则把filter_block给清了
       filter_block.Reset();
     }
   }
@@ -246,10 +246,10 @@ bool BlockBasedFilterBlockReader::ParseFieldsFromBlock(
 bool BlockBasedFilterBlockReader::MayMatch(
     const Slice& entry, uint64_t block_offset, bool no_io,
     GetContext* get_context, BlockCacheLookupContext* lookup_context) const {
-  CachableEntry<BlockContents> filter_block;
 
-  const Status s =
-      GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
+	CachableEntry<BlockContents> filter_block;
+	std::cout << " xxxxxx " << filter_block.GetValue() << std::endl;
+  const Status s = GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
   if (!s.ok()) {
     return true;
   }

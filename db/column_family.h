@@ -566,7 +566,7 @@ class ColumnFamilyData {
 
   // This is the earliest log file number that contains data from this
   // Column Family. All earlier log files must be ignored and not
-  // recovered from
+  // recovered from 表示的是该cf 拥有的最早的log file number。在这之前的wal log file,都可以忽略了
   uint64_t log_number_;
 
   std::atomic<FlushReason> flush_reason_;

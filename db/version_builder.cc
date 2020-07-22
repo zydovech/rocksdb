@@ -442,7 +442,7 @@ class VersionBuilder::Rep {
       for (auto& file_meta_pair : levels_[level].added_files) {
         auto* file_meta = file_meta_pair.second;
         // If the file has been opened before, just skip it.
-        if (!file_meta->table_reader_handle) {
+        if (!file_meta->table_reader_handle) { //如果之前已经打开了，则跳过
           files_meta.emplace_back(file_meta, level);
           statuses.emplace_back(Status::OK());
         }

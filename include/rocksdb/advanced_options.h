@@ -395,7 +395,7 @@ struct AdvancedColumnFamilyOptions {
   // Dynamically changeable through SetOptions() API
   int level0_stop_writes_trigger = 36;
 
-  // Target file size for compaction.
+  // Target file size for compaction. 在compaction的时候，target file的基本大小
   // target_file_size_base is per-file size for level-1.
   // Target file size for level L can be calculated by
   // target_file_size_base * (target_file_size_multiplier ^ (L-1))

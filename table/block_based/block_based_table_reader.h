@@ -55,6 +55,7 @@ typedef std::vector<std::pair<std::string, std::string>> KVPairBlock;
 // loaded blocks in the memory.
 class BlockBasedTable : public TableReader {
  public:
+  //三种filter类型
   static const std::string kFilterBlockPrefix;
   static const std::string kFullFilterBlockPrefix;
   static const std::string kPartitionedFilterBlockPrefix;
@@ -470,7 +471,7 @@ class BlockBasedTable::PartitionedIndexIteratorState
 };
 
 // Stores all the properties associated with a BlockBasedTable.
-// These are immutable.
+// These are immutable. 存储了和sst 相关的属性
 struct BlockBasedTable::Rep {
   Rep(const ImmutableCFOptions& _ioptions, const EnvOptions& _env_options,
       const BlockBasedTableOptions& _table_opt,
@@ -497,6 +498,8 @@ struct BlockBasedTable::Rep {
   const InternalKeyComparator& internal_comparator;
   Status status;
   std::unique_ptr<RandomAccessFileReader> file;
+
+  //cache_key_prefix是 对每个要加入cache的前缀，依据要cache的sst file生成，不同file，肯定不一样，是个唯一的id
   char cache_key_prefix[kMaxCacheKeyPrefixSize];
   size_t cache_key_prefix_size = 0;
   char persistent_cache_key_prefix[kMaxCacheKeyPrefixSize];
@@ -509,7 +512,7 @@ struct BlockBasedTable::Rep {
   Footer footer;
 
   std::unique_ptr<IndexReader> index_reader;
-  std::unique_ptr<FilterBlockReader> filter;
+  std::unique_ptr<FilterBlockReader> filter; //存储的是该table对应的filter block 数据。用于读取filter block的
   std::unique_ptr<UncompressionDictReader> uncompression_dict_reader;
 
   enum class FilterType {

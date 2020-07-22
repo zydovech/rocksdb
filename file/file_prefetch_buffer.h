@@ -19,6 +19,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 // FilePrefetchBuffer is a smart buffer to store and read data from a file.
+//保存的是从文件中预先读取的数据
 class FilePrefetchBuffer {
  public:
   // Constructor.
