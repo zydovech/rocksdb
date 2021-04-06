@@ -370,7 +370,7 @@ Status DBImpl::Recover(
     if (!s.ok()) {
       return s;
     }
-
+	//获取CURRENT 文件的名字
     std::string current_fname = CurrentFileName(dbname_);
     s = env_->FileExists(current_fname);
     if (s.IsNotFound()) {
@@ -398,8 +398,7 @@ Status DBImpl::Recover(
     {
       std::unique_ptr<FSRandomAccessFile> idfile;
       FileOptions customized_fs(file_options_);
-      customized_fs.use_direct_reads |=
-          immutable_db_options_.use_direct_io_for_flush_and_compaction;
+      customized_fs.use_direct_reads |=immutable_db_options_.use_direct_io_for_flush_and_compaction;
       s = fs_->NewRandomAccessFile(current_fname, customized_fs, &idfile,
                                    nullptr);
       if (!s.ok()) {
@@ -419,6 +418,7 @@ Status DBImpl::Recover(
     }
   }
   assert(db_id_.empty());
+  //这个就是真正的recovery操作了,这里是读取manifest文件，进行修复。。
   Status s = versions_->Recover(column_families, read_only, &db_id_);
   if (!s.ok()) {
     return s;
@@ -483,13 +483,11 @@ Status DBImpl::Recover(
     }
 
     SequenceNumber next_sequence(kMaxSequenceNumber);
-    default_cf_handle_ = new ColumnFamilyHandleImpl(
-        versions_->GetColumnFamilySet()->GetDefault(), this, &mutex_);
+    default_cf_handle_ = new ColumnFamilyHandleImpl(versions_->GetColumnFamilySet()->GetDefault(), this, &mutex_);
     default_cf_internal_stats_ = default_cf_handle_->cfd()->internal_stats();
     // TODO(Zhongyi): handle single_column_family_mode_ when
     // persistent_stats is enabled
-    single_column_family_mode_ =
-        versions_->GetColumnFamilySet()->NumberOfColumnFamilies() == 1;
+    single_column_family_mode_ =versions_->GetColumnFamilySet()->NumberOfColumnFamilies() == 1;
 
     // Recover from all newer log files than the ones named in the
     // descriptor (new log files may have been added by the previous
@@ -499,6 +497,7 @@ Status DBImpl::Recover(
     // attention to it in case we are recovering a database
     // produced by an older version of rocksdb.
     std::vector<std::string> filenames;
+    //读取wal_dir文件夹下面的所有文件
     s = env_->GetChildren(immutable_db_options_.wal_dir, &filenames);
     if (s.IsNotFound()) {
       return Status::InvalidArgument("wal_dir not found",
@@ -548,6 +547,7 @@ Status DBImpl::Recover(
       // Recover in the order in which the logs were generated
       std::sort(logs.begin(), logs.end());
       bool corrupted_log_found = false;
+      // 从wal文件中修复
       s = RecoverLogFiles(logs, &next_sequence, read_only,
                           &corrupted_log_found);
       if (corrupted_log_found && recovered_seq != nullptr) {
@@ -788,8 +788,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
           continue;
         }
       }
-      file_reader.reset(new SequentialFileReader(
-          std::move(file), fname, immutable_db_options_.log_readahead_size));
+      file_reader.reset(new SequentialFileReader(std::move(file), fname, immutable_db_options_.log_readahead_size));
     }
 
     // Create the log reader.
@@ -822,8 +821,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
                              immutable_db_options_.wal_recovery_mode) &&
            status.ok()) {
       if (record.size() < WriteBatchInternal::kHeader) {
-        reporter.Corruption(record.size(),
-                            Status::Corruption("log record too small"));
+        reporter.Corruption(record.size(),Status::Corruption("log record too small"));
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
@@ -933,6 +931,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
           &trim_history_scheduler_, true, log_number, this,
           false /* concurrent_memtable_writes */, next_sequence,
           &has_valid_writes, seq_per_batch_, batch_per_txn_);
+
       MaybeIgnoreError(&status);
       if (!status.ok()) {
         // We are treating this as a failure while reading since we read valid
@@ -1278,11 +1277,10 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
     //Options 继承与DBOptions和ColumnFamilyOptions
     DBOptions db_options(options);
-  ColumnFamilyOptions cf_options(options);
+    ColumnFamilyOptions cf_options(options);
   //组成ColumnFamilyDescriptor,默认存在default一个column_family
   std::vector<ColumnFamilyDescriptor> column_families;
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
+  column_families.push_back(ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
   if (db_options.persist_stats_to_disk) {
     column_families.push_back(
         ColumnFamilyDescriptor(kPersistentStatsColumnFamilyName, cf_options));
@@ -1321,13 +1319,10 @@ Status DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
   Status s;
   std::unique_ptr<FSWritableFile> lfile;
 
-  DBOptions db_options =
-      BuildDBOptions(immutable_db_options_, mutable_db_options_);
-  FileOptions opt_file_options =
-      fs_->OptimizeForLogWrite(file_options_, db_options);
+  DBOptions db_options = BuildDBOptions(immutable_db_options_, mutable_db_options_);
+  FileOptions opt_file_options =fs_->OptimizeForLogWrite(file_options_, db_options);
   //log_fname就是  log_file_num.log 如: 000005.log
-  std::string log_fname =
-      LogFileName(immutable_db_options_.wal_dir, log_file_num);
+  std::string log_fname = LogFileName(immutable_db_options_.wal_dir, log_file_num);
 
   if (recycle_log_number) {
     ROCKS_LOG_INFO(immutable_db_options_.info_log,
@@ -1377,8 +1372,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
     //max_write_buffer_size 是所有的最大值
   size_t max_write_buffer_size = 0;
   for (auto cf : column_families) {
-    max_write_buffer_size =
-        std::max(max_write_buffer_size, cf.options.write_buffer_size);
+    max_write_buffer_size = std::max(max_write_buffer_size, cf.options.write_buffer_size);
   }
 
   DBImpl* impl = new DBImpl(db_options, dbname, seq_per_batch, batch_per_txn);
@@ -1419,7 +1413,9 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
   impl->mutex_.Lock();
   // Handles create_if_missing, error_if_exists
   uint64_t recovered_seq(kMaxSequenceNumber);
+  //进行recover
   s = impl->Recover(column_families, false, false, false, &recovered_seq);
+
   if (s.ok()) {
       //处理wal文件
     uint64_t new_log_number = impl->versions_->NewFileNumber();

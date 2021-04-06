@@ -1917,6 +1917,7 @@ class DBImpl : public DB {
   int bg_bottom_compaction_scheduled_;
 
   // count how many background compactions are running or have been scheduled
+  //统计依据调度的compaction 个数
   int bg_compaction_scheduled_;
 
   // stores the number of compactions are currently running

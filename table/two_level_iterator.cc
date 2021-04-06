@@ -73,7 +73,7 @@ class TwoLevelIndexIterator : public InternalIteratorBase<IndexValue> {
   void InitDataBlock();
 
   TwoLevelIteratorState* state_;
-  IteratorWrapperBase<IndexValue> first_level_iter_;
+  IteratorWrapperBase<IndexValue> first_level_iter_; //first level iter
   IteratorWrapperBase<IndexValue> second_level_iter_;  // May be nullptr
   Status status_;
   // If second_level_iter is non-nullptr, then "data_block_handle_" holds the
@@ -193,8 +193,7 @@ void TwoLevelIndexIterator::InitDataBlock() {
       // second_level_iter is already constructed with this iterator, so
       // no need to change anything
     } else {
-      InternalIteratorBase<IndexValue>* iter =
-          state_->NewSecondaryIterator(handle);
+      InternalIteratorBase<IndexValue>* iter = state_->NewSecondaryIterator(handle);
       data_block_handle_ = handle;
       SetSecondLevelIterator(iter);
     }

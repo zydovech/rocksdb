@@ -49,14 +49,14 @@ class PartitionedFilterBlockBuilder : public FullFilterBlockBuilder {
   std::list<FilterEntry> filters;  // list of partitioned indexes and their keys
   std::unique_ptr<IndexBuilder> value;
   std::vector<std::unique_ptr<const char[]>> filter_gc;
-  bool finishing_filters =
-      false;  // true if Finish is called once but not complete yet.
+  bool finishing_filters =false;  // true if Finish is called once but not complete yet.
   // The policy of when cut a filter block and Finish it
   void MaybeCutAFilterBlock(const Slice* next_key);
   // Currently we keep the same number of partitions for filters and indexes.
   // This would allow for some potentioal optimizations in future. If such
   // optimizations did not realize we can use different number of partitions and
   // eliminate p_index_builder_
+  //新增一条数据的时候，就会往data block插入一条数据，index block插入数据，filter里面插入数据..这里面p_index_builder_上面已经处理好了
   PartitionedIndexBuilder* const p_index_builder_;
   // The desired number of keys per partition
   uint32_t keys_per_partition_;

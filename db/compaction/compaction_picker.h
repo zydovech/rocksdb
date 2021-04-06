@@ -69,7 +69,7 @@ class CompactionPicker {
   // compacting. In case the compaction will compact the whole range,
   // compaction_end will be set to nullptr.
   // Client is responsible for compaction_end storage -- when called,
-  // *compaction_end should point to valid InternalKey!
+  // *compaction_end should point to valid InternalMetaKey!
   virtual Compaction* CompactRange(
       const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
       VersionStorageInfo* vstorage, int input_level, int output_level,

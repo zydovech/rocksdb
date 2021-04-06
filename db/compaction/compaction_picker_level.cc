@@ -200,15 +200,15 @@ void LevelCompactionBuilder::SetupInitialFiles() {
     start_level_score_ = vstorage_->CompactionScore(i);
     start_level_ = vstorage_->CompactionScoreLevel(i);
     assert(i == 0 || start_level_score_ <= vstorage_->CompactionScore(i - 1));
-    if (start_level_score_ >= 1) {
+    if (start_level_score_ >= 1) {//只有score 大于1，才需要进行compaction
       if (skipped_l0_to_base && start_level_ == vstorage_->base_level()) {
         // If L0->base_level compaction is pending, don't schedule further
         // compaction from base level. Otherwise L0->base_level compaction
         // may starve.
         continue;
       }
-      output_level_ =
-          (start_level_ == 0) ? vstorage_->base_level() : start_level_ + 1;
+      //如果是level0,则输出到base_level
+      output_level_ = (start_level_ == 0) ? vstorage_->base_level() : start_level_ + 1;
       if (PickFileToCompact()) {
         // found the compaction!
         if (start_level_ == 0) {
@@ -394,7 +394,7 @@ Compaction* LevelCompactionBuilder::GetCompaction() {
 
   // Creating a compaction influences the compaction score because the score
   // takes running compactions into account (by skipping files that are already
-  // being compacted). Since we just changed compaction score, we recalculate it
+  // being compacted). Since we just max_bytes_for_level_basechanged compaction score, we recalculate it
   // here
   vstorage_->ComputeCompactionScore(ioptions_, mutable_cf_options_);
   return c;
@@ -471,14 +471,11 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 
   // Pick the largest file in this level that is not already
   // being compacted
-  const std::vector<int>& file_size =
-      vstorage_->FilesByCompactionPri(start_level_);
-  const std::vector<FileMetaData*>& level_files =
-      vstorage_->LevelFiles(start_level_);
+  const std::vector<int>& file_size = vstorage_->FilesByCompactionPri(start_level_);
+  const std::vector<FileMetaData*>& level_files = vstorage_->LevelFiles(start_level_);
 
   unsigned int cmp_idx;
-  for (cmp_idx = vstorage_->NextCompactionIndex(start_level_);
-       cmp_idx < file_size.size(); cmp_idx++) {
+  for (cmp_idx = vstorage_->NextCompactionIndex(start_level_); cmp_idx < file_size.size(); cmp_idx++) {
     int index = file_size[cmp_idx];
     auto* f = level_files[index];
 
@@ -510,10 +507,9 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     compaction_picker_->GetRange(start_level_inputs_, &smallest, &largest);
     CompactionInputFiles output_level_inputs;
     output_level_inputs.level = output_level_;
-    vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,
-                                    &output_level_inputs.files);
-    if (!output_level_inputs.empty() &&
-        !compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
+    //找到output_level中和要compaction有重叠的文件
+    vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,&output_level_inputs.files);
+    if (!output_level_inputs.empty() && !compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
                                                     &output_level_inputs)) {
       start_level_inputs_.clear();
       continue;

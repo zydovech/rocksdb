@@ -568,7 +568,7 @@ class IndexBlockIter final : public BlockIter<IndexValue> {
   }
 
  private:
-  // Key is in InternalKey format
+  // Key is in InternalMetaKey format
   bool key_includes_seq_;
   bool value_delta_encoded_;
   bool have_first_key_;  // value includes first_internal_key

@@ -116,8 +116,7 @@ Slice BlockBuilder::Finish() {
   }
 
   uint32_t num_restarts = static_cast<uint32_t>(restarts_.size());
-  BlockBasedTableOptions::DataBlockIndexType index_type =
-      BlockBasedTableOptions::kDataBlockBinarySearch;
+  BlockBasedTableOptions::DataBlockIndexType index_type =BlockBasedTableOptions::kDataBlockBinarySearch;
   if (data_block_hash_index_builder_.Valid() &&
       CurrentSizeEstimate() <= kMaxBlockSizeSupportedByHashIndex) {
     data_block_hash_index_builder_.Finish(buffer_);
@@ -131,7 +130,7 @@ Slice BlockBuilder::Finish() {
   finished_ = true;
   return Slice(buffer_);
 }
-
+//添加的要么是value，要么是delta_value。。这两个只有一个起作用，如果不能shared，则直接添加value
 void BlockBuilder::Add(const Slice& key, const Slice& value,
                        const Slice* const delta_value) {
   assert(!finished_);

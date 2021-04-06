@@ -64,16 +64,17 @@ FilterBlockBuilder* CreateFilterBlockBuilder(
     const FilterBuildingContext& context,
     const bool use_delta_encoding_for_index_values,
     PartitionedIndexBuilder* const p_index_builder) {
+
   const BlockBasedTableOptions& table_opt = context.table_options;
+  //需要设置filter_policy
   if (table_opt.filter_policy == nullptr) return nullptr;
 
-  FilterBitsBuilder* filter_bits_builder =
-      BloomFilterPolicy::GetBuilderFromContext(context);
-  if (filter_bits_builder == nullptr) {
+  FilterBitsBuilder* filter_bits_builder =BloomFilterPolicy::GetBuilderFromContext(context);
+  if (filter_bits_builder == nullptr) {//block based 就是null
     return new BlockBasedFilterBlockBuilder(mopt.prefix_extractor.get(),
                                             table_opt);
   } else {
-    if (table_opt.partition_filters) {
+    if (table_opt.partition_filters) {//设置了partition_filter则走patition
       assert(p_index_builder != nullptr);
       // Since after partition cut request from filter builder it takes time
       // until index builder actully cuts the partition, we take the lower bound
@@ -298,7 +299,7 @@ struct BlockBasedTableBuilder::Rep {
   std::unique_ptr<IndexBuilder> index_builder;
   PartitionedIndexBuilder* p_index_builder_ = nullptr;
 
-  std::string last_key;
+  std::string last_key; //记录的是最后插入的key
   CompressionType compression_type;
   uint64_t sample_for_compression;
   CompressionOptions compression_opts;
@@ -334,6 +335,7 @@ struct BlockBasedTableBuilder::Rep {
     kUnbuffered,
     kClosed,
   };
+  //这里默认应该是kUnbuffered的。后面再仔细研究
   State state;
 
   const bool use_delta_encoding_for_index_values;
@@ -344,6 +346,7 @@ struct BlockBasedTableBuilder::Rep {
   BlockHandle pending_handle;  // Handle to add to index block
 
   std::string compressed_output;
+  //default 的就是FlushBlockBySizePolicy
   std::unique_ptr<FlushBlockPolicy> flush_block_policy;
   int level_at_creation;
   uint32_t column_family_id;
@@ -499,7 +502,7 @@ BlockBasedTableBuilder::~BlockBasedTableBuilder() {
   assert(rep_->state == Rep::State::kClosed);
   delete rep_;
 }
-
+//增加的是internal_key 带有sequence和type
 void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
   Rep* r = rep_;
   assert(rep_->state != Rep::State::kClosed);
@@ -511,10 +514,11 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       assert(r->internal_comparator.Compare(key, Slice(r->last_key)) > 0);
     }
 #endif  // NDEBUG
-
+	//正常是依据当前data-block的大小，进行处理
     auto should_flush = r->flush_block_policy->Update(key, value);
     if (should_flush) {
       assert(!r->data_block.empty());
+      //写 data block
       Flush();
 
       if (r->state == Rep::State::kBuffered &&
@@ -530,13 +534,14 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       // "the r" as the key for the index block entry since it is >= all
       // entries in the first block and < all entries in subsequent
       // blocks.
-      if (ok() && r->state == Rep::State::kUnbuffered) {
+      if (ok() && r->state == Rep::State::kUnbuffered) { //一个block就会有一个index entry
         r->index_builder->AddIndexEntry(&r->last_key, &key, r->pending_handle);
       }
     }
 
     // Note: PartitionedFilterBlockBuilder requires key being added to filter
     // builder after being added to index builder.
+    //添加到filter里面
     if (r->state == Rep::State::kUnbuffered && r->filter_builder != nullptr) {
       size_t ts_sz = r->internal_comparator.user_comparator()->timestamp_size();
       r->filter_builder->Add(ExtractUserKeyAndStripTimestamp(key, ts_sz));
@@ -567,6 +572,7 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
     assert(false);
   }
 
+  //记录一些属性
   r->props.num_entries++;
   r->props.raw_key_size += key.size();
   r->props.raw_value_size += value.size();
@@ -724,9 +730,12 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
   assert(r->status.ok());
+  //把block的内容写到file里面
   r->status = r->file->Append(block_contents);
-  if (r->status.ok()) {
-    char trailer[kBlockTrailerSize];
+  if (r->status.ok()) {//写尾部数据
+    //type + crc
+  	char trailer[kBlockTrailerSize];
+
     trailer[0] = type;
     char* trailer_without_type = trailer + 1;
     switch (r->table_options.checksum) {
@@ -774,6 +783,8 @@ void BlockBasedTableBuilder::WriteRawBlock(const Slice& block_contents,
     }
     if (r->status.ok()) {
       r->offset += block_contents.size() + kBlockTrailerSize;
+
+      //是否需要block对齐
       if (r->table_options.block_align && is_data_block) {
         size_t pad_bytes =
             (r->alignment - ((block_contents.size() + kBlockTrailerSize) &
@@ -844,26 +855,29 @@ void BlockBasedTableBuilder::WriteFilterBlock(
                              rep_->filter_builder->NumAdded() == 0);
   if (ok() && !empty_filter_block) {
     Status s = Status::Incomplete();
-    while (ok() && s.IsIncomplete()) {
-      Slice filter_content =
-          rep_->filter_builder->Finish(filter_block_handle, &s);
+
+    while (ok() && s.IsIncomplete()) {//如果返回的状态是IsIncomplete，则会一直调用
+      Slice filter_content = rep_->filter_builder->Finish(filter_block_handle, &s);
       assert(s.ok() || s.IsIncomplete());
       rep_->props.filter_size += filter_content.size();
+      //写到一个block里面，会把该block的数据handler 放到filter_block_handle中
       WriteRawBlock(filter_content, kNoCompression, &filter_block_handle);
     }
   }
-  if (ok() && !empty_filter_block) {
+  if (ok() && !empty_filter_block) { //存在filter block的话，则写入meta index block内容
     // Add mapping from "<filter_block_prefix>.Name" to location
     // of filter data.
     std::string key;
-    if (rep_->filter_builder->IsBlockBased()) {
+    if (rep_->filter_builder->IsBlockBased()) { //是否是block baseed
       key = BlockBasedTable::kFilterBlockPrefix;
     } else {
       key = rep_->table_options.partition_filters
                 ? BlockBasedTable::kPartitionedFilterBlockPrefix
                 : BlockBasedTable::kFullFilterBlockPrefix;
     }
+    //添加filter的name
     key.append(rep_->table_options.filter_policy->Name());
+    //对于partition来说 这里存放的是索引信息
     meta_index_builder->Add(key, filter_block_handle);
   }
 }

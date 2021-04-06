@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <iostream>
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
 
@@ -590,15 +590,16 @@ Status BlockBasedTable::Open(
   std::unique_ptr<FilePrefetchBuffer> prefetch_buffer;
 
   // prefetch both index and filters, down to all partitions
+  //level0的时候，肯定prefetch_all。。
   const bool prefetch_all = prefetch_index_and_filter_in_cache || level == 0;
+  //只有当cache_index_and_filter_blocks为false的时候，才会preload_all
   const bool preload_all = !table_options.cache_index_and_filter_blocks;
 
-  if (!ioptions.allow_mmap_reads) {
+  if (!ioptions.allow_mmap_reads) {//不是mmap_read,则进行readahead
   	//这个只是利用文件系统的readahead
-    s = PrefetchTail(file.get(), file_size, tail_prefetch_stats, prefetch_all,
-                     preload_all, &prefetch_buffer);
+    s = PrefetchTail(file.get(), file_size, tail_prefetch_stats, prefetch_all, preload_all, &prefetch_buffer);
   } else {
-    // Should not prefetch for mmap mode.
+    // Should not prefetch for mmap mode. 在mmap的模式下面，不用预加载数据
     prefetch_buffer.reset(new FilePrefetchBuffer(
         nullptr, 0, 0, false /* enable */, true /* track_min_offset */));
   }
@@ -737,7 +738,7 @@ Status BlockBasedTable::PrefetchTail(
         nullptr, 0, 0, false /* enable */, true /* track_min_offset */));
     //这里只是预先加载到page cache里面
     s = file->Prefetch(prefetch_off, prefetch_len);
-  } else {
+  } else {//如果是直接IO的，则把文件prefetch导buffer里面
     prefetch_buffer->reset(new FilePrefetchBuffer(
         nullptr, 0, 0, true /* enable */, true /* track_min_offset */));
     s = (*prefetch_buffer)->Prefetch(file, prefetch_off, prefetch_len);
@@ -966,15 +967,14 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
   const bool use_cache = table_options.cache_index_and_filter_blocks;
 
   // pin both index and filters, down to all partitions
-  const bool pin_all =
-      rep_->table_options.pin_l0_filter_and_index_blocks_in_cache && level == 0;
+  const bool pin_all = rep_->table_options.pin_l0_filter_and_index_blocks_in_cache && level == 0;
 
-  // prefetch the first level of index
+  // prefetch the first level of index prefetch表示预取。。即使预取了，也不能说就能存放在堆里，因为如果设置user_cache，则不pin得话，还是会清掉
   const bool prefetch_index =
       prefetch_all ||
       (table_options.pin_top_level_index_and_filter &&
        index_type == BlockBasedTableOptions::kTwoLevelIndexSearch);
-  // pin the first level of index
+  // pin the first level of index 是否会把预取的数据保留
   const bool pin_index =
       pin_all || (table_options.pin_top_level_index_and_filter &&
                   index_type == BlockBasedTableOptions::kTwoLevelIndexSearch);
@@ -1008,7 +1008,7 @@ Status BlockBasedTable::PrefetchIndexAndFilterBlocks(
       pin_all || (table_options.pin_top_level_index_and_filter &&
                   rep_->filter_type == Rep::FilterType::kPartitionedFilter);
 
-  if (rep_->filter_policy) {
+  if (rep_->filter_policy) {//如果filter_policy存在 ，创建对应的reader
     auto filter = new_table->CreateFilterBlockReader(
         prefetch_buffer, use_cache, prefetch_filter, pin_filter,
         lookup_context);
@@ -1239,7 +1239,7 @@ Status BlockBasedTable::PutDataBlockToCache(
   Statistics* statistics = ioptions.statistics;
 
   std::unique_ptr<TBlocklike> block_holder;
-  if (raw_block_comp_type != kNoCompression) {
+  if (raw_block_comp_type != kNoCompression) {//如果之前的数据，是经过压缩的，则进行解压缩
     // Retrieve the uncompressed contents into a new buffer
     BlockContents uncompressed_block_contents;
     UncompressionContext context(raw_block_comp_type);
@@ -1281,7 +1281,7 @@ Status BlockBasedTable::PutDataBlockToCache(
         block_cont_for_comp_cache->ApproximateMemoryUsage(),
         &DeleteCachedEntry<BlockContents>);
     if (s.ok()) {
-      // Avoid the following code to delete this cached block.
+      // Avoid the rocksdb_property_valuefollowing code to delete this cached block.
       RecordTick(statistics, BLOCK_CACHE_COMPRESSED_ADD);
     } else {
       RecordTick(statistics, BLOCK_CACHE_COMPRESSED_ADD_FAILURES);
@@ -1291,8 +1291,12 @@ Status BlockBasedTable::PutDataBlockToCache(
 
   // insert into uncompressed block cache
   if (block_cache != nullptr && block_holder->own_bytes()) {
+	//计算占用的内存大小
     size_t charge = block_holder->ApproximateMemoryUsage();
+
     Cache::Handle* cache_handle = nullptr;
+
+    //把block的数据插入到缓存中，插入缓存是按照block来的，
     s = block_cache->Insert(block_cache_key, block_holder.get(), charge,
                             &DeleteCachedEntry<TBlocklike>, &cache_handle,
                             priority);
@@ -1389,7 +1393,11 @@ IndexBlockIter* BlockBasedTable::InitBlockIterator<IndexBlockIter>(
 // If contents is non-null, it skips the cache lookup and disk read, since
 // the caller has already read it. In both cases, if ro.fill_cache is true,
 // it inserts the block into the block cache.
-template <typename TBlocklike>
+/*如果contents 是空的，则依据handler从block cache里面查找，如果cache里面没有，则从文件中查找（特殊情况下从prefetch_buffer里面有）
+* 如果contents不为空，则跳过cache lookup 和disk read 。因为caller已经读取了数据
+ * 如果fill_cache为true，则会把数据插入到block cache里面
+*/
+ template <typename TBlocklike>
 Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
     FilePrefetchBuffer* prefetch_buffer, const ReadOptions& ro,
     const BlockHandle& handle, const UncompressionDict& uncompression_dict,
@@ -1427,7 +1435,7 @@ Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
                          compressed_cache_key);
     }
 
-    if (!contents) {
+    if (!contents) {//如果contents为空，则从cache里面查找
       s = GetDataBlockFromCache(key, ckey, block_cache, block_cache_compressed,
                                 ro, block_entry, uncompression_dict, block_type,
                                 get_context);
@@ -1458,6 +1466,7 @@ Status BlockBasedTable::MaybeReadBlockAndLoadToCache(
             rep_->persistent_cache_options,
             GetMemoryAllocator(rep_->table_options),
             GetMemoryAllocatorForCompressedBlock(rep_->table_options));
+        //读取block的内容
         s = block_fetcher.ReadBlockContents();
         raw_block_comp_type = block_fetcher.get_compression_type();
         contents = &raw_block_contents;
@@ -1804,7 +1813,7 @@ Status BlockBasedTable::RetrieveBlock(
   assert(block_entry->IsEmpty());
 
   Status s;
-  if (use_cache) {
+  if (use_cache) {//先从cache里面找
     s = MaybeReadBlockAndLoadToCache(prefetch_buffer, ro, handle,
                                      uncompression_dict, block_entry,
                                      block_type, get_context, lookup_context,
@@ -1837,6 +1846,7 @@ Status BlockBasedTable::RetrieveBlock(
   {
     StopWatch sw(rep_->ioptions.env, rep_->ioptions.statistics,
                  READ_BLOCK_GET_MICROS);
+
     s = ReadBlockFromFile(
         rep_->file.get(), prefetch_buffer, rep_->footer, ro, handle, &block,
         rep_->ioptions, do_uncompress, maybe_compressed, block_type,
@@ -2041,10 +2051,12 @@ InternalIterator* BlockBasedTable::NewIterator(
     const ReadOptions& read_options, const SliceTransform* prefix_extractor,
     Arena* arena, bool skip_filters, TableReaderCaller caller,
     size_t compaction_readahead_size) {
+
   BlockCacheLookupContext lookup_context{caller};
   bool need_upper_bound_check =
       read_options.auto_prefix_mode ||
       PrefixExtractorChanged(rep_->table_properties.get(), prefix_extractor);
+  //创建一个table的 iter
   if (arena == nullptr) {
     return new BlockBasedTableIterator<DataBlockIter>(
         this, read_options, rep_->internal_comparator,
@@ -2083,6 +2095,7 @@ FragmentedRangeTombstoneIterator* BlockBasedTable::NewRangeTombstoneIterator(
       rep_->fragmented_range_dels, rep_->internal_comparator, snapshot);
 }
 
+//这里的full指的是对于一个文件，只生成一个filter block。。全部放在一起，不像之前，2k数据就生成一个
 bool BlockBasedTable::FullFilterKeyMayMatch(
     const ReadOptions& read_options, FilterBlockReader* filter,
     const Slice& internal_key, const bool no_io,
@@ -2090,18 +2103,16 @@ bool BlockBasedTable::FullFilterKeyMayMatch(
     BlockCacheLookupContext* lookup_context) const {
 
   if (filter == nullptr || filter->IsBlockBased()) {
-  	//如果
+  	//如果filter为空，或者fiter是 block based 的，就都不走full filter key match
     return true;
   }
   Slice user_key = ExtractUserKey(internal_key);
   const Slice* const const_ikey_ptr = &internal_key;
   bool may_match = true;
-  if (rep_->whole_key_filtering) {
-    size_t ts_sz =
-        rep_->internal_comparator.user_comparator()->timestamp_size();
+  if (rep_->whole_key_filtering) { //正常这里是true的
+    size_t ts_sz = rep_->internal_comparator.user_comparator()->timestamp_size();
     Slice user_key_without_ts = StripTimestampFromUserKey(user_key, ts_sz);
-    may_match =
-        filter->KeyMayMatch(user_key_without_ts, prefix_extractor, kNotValid,
+    may_match = filter->KeyMayMatch(user_key_without_ts, prefix_extractor, kNotValid,
                             no_io, const_ikey_ptr, get_context, lookup_context);
   } else if (!read_options.total_order_seek && prefix_extractor &&
              rep_->table_properties->prefix_extractor_name.compare(
@@ -2149,8 +2160,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
   const bool no_io = read_options.read_tier == kBlockCacheTier;
 
   //布隆过滤器
-  FilterBlockReader* const filter =
-      !skip_filters ? rep_->filter.get() : nullptr;
+  FilterBlockReader* const filter =!skip_filters ? rep_->filter.get() : nullptr;
 
   // First check the full filter
   // If full filter not useful, Then go into each block
@@ -2164,6 +2174,8 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
     lookup_context.get_from_user_specified_snapshot =
         read_options.snapshot != nullptr;
   }
+
+  //看看bloom filter里面是否存在
   const bool may_match =
       FullFilterKeyMayMatch(read_options, filter, key, no_io, prefix_extractor,get_context, &lookup_context);
 
@@ -2180,9 +2192,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
       need_upper_bound_check = PrefixExtractorChanged(
           rep_->table_properties.get(), prefix_extractor);
     }
-    auto iiter =
-        NewIndexIterator(read_options, need_upper_bound_check, &iiter_on_stack,
-                         get_context, &lookup_context);
+    auto iiter = NewIndexIterator(read_options, need_upper_bound_check, &iiter_on_stack, get_context, &lookup_context);
     std::unique_ptr<InternalIteratorBase<IndexValue>> iiter_unique_ptr;
     if (iiter != &iiter_on_stack) {
       iiter_unique_ptr.reset(iiter);
@@ -2195,6 +2205,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       IndexValue v = iiter->value();
 
+      //这个地方判断是否存在于filter，只会对block based的起作用了，因为对于其他类型的，上面已经处理了
       bool not_exist_in_filter =
           filter != nullptr && filter->IsBlockBased() == true &&
           !filter->KeyMayMatch(ExtractUserKeyAndStripTimestamp(key, ts_sz),
@@ -2225,6 +2236,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
           /*get_from_user_specified_snapshot=*/read_options.snapshot !=
               nullptr};
       bool does_referenced_key_exist = false;
+      //新建一个data block iter
       DataBlockIter biter;
       uint64_t referenced_data_size = 0;
       NewDataBlockIterator<DataBlockIter>(

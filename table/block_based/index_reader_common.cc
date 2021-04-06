@@ -37,7 +37,7 @@ Status BlockBasedTable::IndexReaderCommon::GetOrReadIndexBlock(
     CachableEntry<Block>* index_block) const {
   assert(index_block != nullptr);
 
-  if (!index_block_.IsEmpty()) {
+  if (!index_block_.IsEmpty()) { //如果这里不为空的话，则该index_block的内容以及有了，就可以直接返回了
     index_block->SetUnownedValue(index_block_.GetValue());
     return Status::OK();
   }

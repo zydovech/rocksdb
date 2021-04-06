@@ -289,9 +289,9 @@ void FlushJob::Cancel() {
   base_->Unref();
 }
 
+//写文件导level0
 Status FlushJob::WriteLevel0Table() {
-  AutoThreadOperationStageUpdater stage_updater(
-      ThreadStatus::STAGE_FLUSH_WRITE_L0);
+  AutoThreadOperationStageUpdater stage_updater(ThreadStatus::STAGE_FLUSH_WRITE_L0);
   db_mutex_->AssertHeld();
   const uint64_t start_micros = db_options_.env->NowMicros();
   const uint64_t start_cpu_micros = db_options_.env->NowCPUNanos() / 1000;
@@ -305,9 +305,9 @@ Status FlushJob::WriteLevel0Table() {
     // memtables and range_del_iters store internal iterators over each data
     // memtable and its associated range deletion memtable, respectively, at
     // corresponding indexes.
+    //保存的是迭代器
     std::vector<InternalIterator*> memtables;
-    std::vector<std::unique_ptr<FragmentedRangeTombstoneIterator>>
-        range_del_iters;
+    std::vector<std::unique_ptr<FragmentedRangeTombstoneIterator>> range_del_iters;
     ReadOptions ro;
     ro.total_order_seek = true;
     Arena arena;
@@ -315,10 +315,11 @@ Status FlushJob::WriteLevel0Table() {
     uint64_t total_data_size = 0;
     size_t total_memory_usage = 0;
     for (MemTable* m : mems_) {
-      ROCKS_LOG_INFO(
-          db_options_.info_log,
+      ROCKS_LOG_INFO( db_options_.info_log,
           "[%s] [JOB %d] Flushing memtable with next log file: %" PRIu64 "\n",
           cfd_->GetName().c_str(), job_context_->job_id, m->GetNextLogNumber());
+
+      //添加迭代器
       memtables.push_back(m->NewIterator(ro, &arena));
       auto* range_del_iter =
           m->NewRangeTombstoneIterator(ro, kMaxSequenceNumber);
@@ -341,6 +342,7 @@ Status FlushJob::WriteLevel0Table() {
                          << GetFlushReasonString(cfd_->GetFlushReason());
 
     {
+      //生成一个merge iterator
       ScopedArenaIterator iter(
           NewMergingIterator(&cfd_->internal_comparator(), &memtables[0],
                              static_cast<int>(memtables.size()), &arena));
@@ -363,8 +365,7 @@ Status FlushJob::WriteLevel0Table() {
       }
       const uint64_t current_time = static_cast<uint64_t>(_current_time);
 
-      uint64_t oldest_key_time =
-          mems_.front()->ApproximateOldestKeyTime();
+      uint64_t oldest_key_time = mems_.front()->ApproximateOldestKeyTime();
 
       // It's not clear whether oldest_key_time is always available. In case
       // it is not available, use current_time.

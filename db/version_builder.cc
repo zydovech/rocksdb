@@ -77,7 +77,7 @@ class VersionBuilder::Rep {
     }
   };
 
-  struct LevelState {
+  struct LevelState { //记录的是一个level的状态，一个level就是一些文件
     std::unordered_set<uint64_t> deleted_files;
     // Map from file number to file meta data.
     std::unordered_map<uint64_t, FileMetaData*> added_files;
@@ -408,10 +408,11 @@ class VersionBuilder::Rep {
     bool always_load = (table_cache_capacity == TableCache::kInfiniteCapacity);
     size_t max_load = port::kMaxSizet;
 
-    if (!always_load) {
+    if (!always_load) { //如果不是加载所有，就是设置了max_open_files
       // If it is initial loading and not set to always loading all the
       // files, we only load up to kInitialLoadLimit files, to limit the
       // time reopening the DB.
+      //最多也就load 16个文件
       const size_t kInitialLoadLimit = 16;
       size_t load_limit;
       // If the table cache is not 1/4 full, we pin the table handle to
@@ -427,7 +428,7 @@ class VersionBuilder::Rep {
       }
 
       size_t table_cache_usage = table_cache_->get_cache()->GetUsage();
-      if (table_cache_usage >= load_limit) {
+      if (table_cache_usage >= load_limit) { //如果table_cache里面的元素数量已经很多了，则直接返回
         // TODO (yanqin) find a suitable status code.
         return Status::OK();
       } else {
@@ -438,6 +439,7 @@ class VersionBuilder::Rep {
     // <file metadata, level>
     std::vector<std::pair<FileMetaData*, int>> files_meta;
     std::vector<Status> statuses;
+    //收集要load 的文件
     for (int level = 0; level < num_levels_; level++) {
       for (auto& file_meta_pair : levels_[level].added_files) {
         auto* file_meta = file_meta_pair.second;
@@ -456,8 +458,10 @@ class VersionBuilder::Rep {
     }
 
     std::atomic<size_t> next_file_meta_idx(0);
+    //这里是设置一个函数
     std::function<void()> load_handlers_func([&]() {
       while (true) {
+      	//获取下一个要加载的文件序号
         size_t file_idx = next_file_meta_idx.fetch_add(1);
         if (file_idx >= files_meta.size()) {
           break;
@@ -465,16 +469,17 @@ class VersionBuilder::Rep {
 
         auto* file_meta = files_meta[file_idx].first;
         int level = files_meta[file_idx].second;
+        //通过table_cache来读取文件
         statuses[file_idx] = table_cache_->FindTable(
             file_options_, *(base_vstorage_->InternalComparator()),
             file_meta->fd, &file_meta->table_reader_handle, prefix_extractor,
             false /*no_io */, true /* record_read_stats */,
             internal_stats->GetFileReadHist(level), false, level,
             prefetch_index_and_filter_in_cache);
+
         if (file_meta->table_reader_handle != nullptr) {
           // Load table_reader
-          file_meta->fd.table_reader = table_cache_->GetTableReaderFromHandle(
-              file_meta->table_reader_handle);
+          file_meta->fd.table_reader = table_cache_->GetTableReaderFromHandle(file_meta->table_reader_handle);
         }
       }
     });

@@ -4472,7 +4472,7 @@ TEST_P(BlockBasedTableTest, DataBlockHashIndex) {
   const int kValSize = 40;
 
   BlockBasedTableOptions table_options = GetBlockBasedTableOptions();
-  table_options.data_block_index_type =
+  table_options.data_block_index_typedata_block_index_type =
       BlockBasedTableOptions::kDataBlockBinaryAndHash;
 
   Options options;

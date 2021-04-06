@@ -1260,10 +1260,10 @@ Status CompactionJob::FinishCompactionOutputFile(
         // OK because the read path's file-picking code only considers the user
         // key portion.
         //
-        // Note Seek() also creates InternalKey with (user_key,
+        // Note Seek() also creates InternalMetaKey with (user_key,
         // kMaxSequenceNumber), but with kTypeDeletion (0x7) instead of
         // kTypeRangeDeletion (0xF), so the range tombstone comes before the
-        // Seek() key in InternalKey's ordering. So Seek() will look in the
+        // Seek() key in InternalMetaKey's ordering. So Seek() will look in the
         // next file for the user key.
         largest_candidate =
             InternalKey(*upper_bound, kMaxSequenceNumber, kTypeRangeDeletion);

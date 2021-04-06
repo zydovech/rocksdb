@@ -249,8 +249,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
   TEST_SYNC_POINT("DBImpl::WriteImpl:BeforeLeaderEnters");
   //把多个写 合并到write_group中
-  last_batch_group_size_ =
-      write_thread_.EnterAsBatchGroupLeader(&w, &write_group);
+  last_batch_group_size_ =write_thread_.EnterAsBatchGroupLeader(&w, &write_group);
 
   if (status.ok()) {
     // Rules for when we can update the memtable concurrently
@@ -264,8 +263,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
     // assumed to be true.  Rule 3 is checked for each batch.  We could
     // relax rules 2 if we could prevent write batches from referring
     // more than once to a particular key.
-    bool parallel = immutable_db_options_.allow_concurrent_memtable_write &&
-                    write_group.size > 1;
+    bool parallel = immutable_db_options_.allow_concurrent_memtable_write && write_group.size > 1;
     size_t total_count = 0;
     size_t valid_batches = 0;
     size_t total_byte_size = 0;
@@ -843,7 +841,7 @@ void DBImpl::MemTableInsertStatusCheck(const Status& status) {
     mutex_.Unlock();
   }
 }
-
+//在真正的写之前
 Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
                                bool* need_log_sync,
                                WriteContext* write_context) {
@@ -1662,14 +1660,12 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   // flush happens before logging, but that should be ok.
   int num_imm_unflushed = cfd->imm()->NumNotFlushed();
   //预先申请的block大小
-  const auto preallocate_block_size =
-      GetWalPreallocateBlockSize(mutable_cf_options.write_buffer_size);
+  const auto preallocate_block_size =GetWalPreallocateBlockSize(mutable_cf_options.write_buffer_size);
   mutex_.Unlock();
   if (creating_new_log) {
     // TODO: Write buffer size passed in should be max of all CF's instead
     // of mutable_cf_options.write_buffer_size.
-    s = CreateWAL(new_log_number, recycle_log_number, preallocate_block_size,
-                  &new_log);
+    s = CreateWAL(new_log_number, recycle_log_number, preallocate_block_size,&new_log);
   }
   if (s.ok()) {
     SequenceNumber seq = versions_->LastSequence();

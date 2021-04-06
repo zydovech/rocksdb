@@ -365,7 +365,7 @@
 * Properly set the stop key for a truncated manual CompactRange
 * Fix slow flush/compaction when DB contains many snapshots. The problem became noticeable to us in DBs with 100,000+ snapshots, though it will affect others at different thresholds.
 * Fix the bug that WriteBatchWithIndex's SeekForPrev() doesn't see the entries with the same key.
-* Fix the bug where user comparator was sometimes fed with InternalKey instead of the user key. The bug manifests when during GenerateBottommostFiles.
+* Fix the bug where user comparator was sometimes fed with InternalMetaKey instead of the user key. The bug manifests when during GenerateBottommostFiles.
 * Fix a bug in WritePrepared txns where if the number of old snapshots goes beyond the snapshot cache size (128 default) the rest will not be checked when evicting a commit entry from the commit cache.
 * Fixed Get correctness bug in the presence of range tombstones where merge operands covered by a range tombstone always result in NotFound.
 * Start populating `NO_FILE_CLOSES` ticker statistic, which was always zero previously.
@@ -422,7 +422,7 @@
 * The "rocksdb.num.entries" table property no longer counts range deletion tombstones as entries.
 
 ### New Features
-* Changes the format of index blocks by storing the key in their raw form rather than converting them to InternalKey. This saves 8 bytes per index key. The feature is backward compatible but not forward compatible. It is disabled by default unless format_version 3 or above is used.
+* Changes the format of index blocks by storing the key in their raw form rather than converting them to InternalMetaKey. This saves 8 bytes per index key. The feature is backward compatible but not forward compatible. It is disabled by default unless format_version 3 or above is used.
 * Avoid memcpy when reading mmap files with OpenReadOnly and max_open_files==-1.
 * Support dynamically changing `ColumnFamilyOptions::ttl` via `SetOptions()`.
 * Add a new table property, "rocksdb.num.range-deletions", which counts the number of range deletion tombstones in the table.

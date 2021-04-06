@@ -57,11 +57,18 @@ class FilterBlockBuilder {
   void operator=(const FilterBlockBuilder&) = delete;
 
   virtual ~FilterBlockBuilder() {}
-
+  //返回该filter是否是block based的
+  //FullFilterBlockBuilder 返回false
+  //BlockBasedFilterBlockBuilder 返回true
   virtual bool IsBlockBased() = 0;                    // If is blockbased filter
+  //当sst 开启一个新的block的时候，怎么搞，对于block based的filter来说，这里就会按2k数据建立一个filter。对于一个4k的block,会建立两个filter
+  //对于FullFilterBlockBuilder来说，这个是空的
   virtual void StartBlock(uint64_t block_offset) = 0;  // Start new block filter
+  //新增key
   virtual void Add(const Slice& key) = 0;      // Add a key to current filter
+
   virtual size_t NumAdded() const = 0;         // Number of keys added
+
   Slice Finish() {                             // Generate Filter
     const BlockHandle empty_handle;
     Status dont_care_status;
@@ -91,9 +98,9 @@ class FilterBlockReader {
    * reading data from disk. This is used in PartitionedFilterBlockReader to
    * avoid reading partitions that are not in block cache already
    *
-   * Normally filters are built on only the user keys and the InternalKey is not
+   * Normally filters are built on only the user keys and the InternalMetaKey is not
    * needed for a query. The index in PartitionedFilterBlockReader however is
-   * built upon InternalKey and must be provided via const_ikey_ptr when running
+   * built upon InternalMetaKey and must be provided via const_ikey_ptr when running
    * queries.
    */
   virtual bool KeyMayMatch(const Slice& key,

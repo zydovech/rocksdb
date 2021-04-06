@@ -65,11 +65,11 @@ class BlockBasedFilterBlockBuilder : public FilterBlockBuilder {
                                     // to "entries_".
   size_t prev_prefix_size_;         // the length of the last appended prefix to
                                     // "entries_".
-  std::string entries_;             // Flattened entry contents
+  std::string entries_;             // Flattened entry contents 记录了所有key的数据，不同key之间靠下面的start分割
   std::vector<size_t> start_;       // Starting index in entries_ of each entry
-  std::string result_;              // Filter data computed so far
+  std::string result_;              // Filter data computed so far //记录的是计算出来的filter数据
   std::vector<Slice> tmp_entries_;  // policy_->CreateFilter() argument
-  std::vector<uint32_t> filter_offsets_;
+  std::vector<uint32_t> filter_offsets_; //用于区分result里面，不同数据产生的filter
   size_t num_added_;  // Number of keys added
 };
 

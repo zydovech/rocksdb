@@ -385,6 +385,7 @@ Status ExternalSstFileIngestionJob::GetIngestedFileInfo(
                          sv->mutable_cf_options.prefix_extractor.get(),
                          env_options_, cfd_->internal_comparator()),
       std::move(sst_file_reader), file_to_ingest->file_size, &table_reader);
+
   if (!status.ok()) {
     return status;
   }

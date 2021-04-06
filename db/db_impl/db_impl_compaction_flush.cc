@@ -679,8 +679,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
                                false /* writes_stopped */);
     } else {
     	//需要的话，则flush memtable。。这里会等待，直到刷盘结束
-      s = FlushMemTable(cfd, fo, FlushReason::kManualCompaction,
-                        false /* writes_stopped*/);
+      s = FlushMemTable(cfd, fo, FlushReason::kManualCompaction,false /* writes_stopped*/);
     }
     if (!s.ok()) {
       LogFlush(immutable_db_options_.info_log);
@@ -691,8 +690,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
   constexpr int kInvalidLevel = -1;
   int final_output_level = kInvalidLevel;
   bool exclusive = options.exclusive_manual_compaction;
-  if (cfd->ioptions()->compaction_style == kCompactionStyleUniversal &&
-      cfd->NumberLevels() > 1) {
+  if (cfd->ioptions()->compaction_style == kCompactionStyleUniversal &&cfd->NumberLevels() > 1) {
     // Always compact all files together.
     final_output_level = cfd->NumberLevels() - 1;
     // if bottom most level is reserved
@@ -712,21 +710,16 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
       ReadOptions ro;
       ro.total_order_seek = true;
       bool overlap;
-      for (int level = 0;
-           level < current_version->storage_info()->num_non_empty_levels();
-           level++) {
+      for (int level = 0; level < current_version->storage_info()->num_non_empty_levels(); level++) {
         overlap = true;
         if (begin != nullptr && end != nullptr) {
         	//如果开始和结束都不为空，则要查看当前level是否有重叠的
-          Status status = current_version->OverlapWithLevelIterator(
-              ro, file_options_, *begin, *end, level, &overlap);
+          Status status = current_version->OverlapWithLevelIterator(ro, file_options_, *begin, *end, level, &overlap);
           if (!status.ok()) {
-            overlap = current_version->storage_info()->OverlapInLevel(
-                level, begin, end);
+            overlap = current_version->storage_info()->OverlapInLevel( level, begin, end);
           }
         } else {//查看是否有重叠
-          overlap = current_version->storage_info()->OverlapInLevel(level,
-                                                                    begin, end);
+          overlap = current_version->storage_info()->OverlapInLevel(level, begin, end);
         }
         if (overlap) {//有重叠的话，则记录
           if (first_overlapped_level == kInvalidLevel) {
@@ -744,8 +737,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
       uint64_t next_file_number = versions_->current_next_file_number();
       final_output_level = max_overlapped_level;
       int output_level;
-      for (int level = first_overlapped_level; level <= max_overlapped_level;
-           level++) {
+      for (int level = first_overlapped_level; level <= max_overlapped_level;level++) {
         // in case the compaction is universal or if we're compacting the
         // bottom-most level, the output level will be the same as input one.
         // level 0 can never be the bottommost level (i.e. if all files are in
@@ -1770,6 +1762,7 @@ Status DBImpl::WaitUntilFlushWouldNotStallWrites(ColumnFamilyData* cfd,
   {
     *flush_needed = true;
     InstrumentedMutexLock l(&mutex_);
+    //记录下等待开始前的 memtable_id
     uint64_t orig_active_memtable_id = cfd->mem()->GetID();
     WriteStallCondition write_stall_condition = WriteStallCondition::kNormal;
     do {
@@ -1796,9 +1789,8 @@ Status DBImpl::WaitUntilFlushWouldNotStallWrites(ColumnFamilyData* cfd,
         return Status::ShutdownInProgress();
       }
 
-      uint64_t earliest_memtable_id =
-          std::min(cfd->mem()->GetID(), cfd->imm()->GetEarliestMemTableID());
-      if (earliest_memtable_id > orig_active_memtable_id) {
+      uint64_t earliest_memtable_id = std::min(cfd->mem()->GetID(), cfd->imm()->GetEarliestMemTableID());
+      if (earliest_memtable_id > orig_active_memtable_id) { //已经大于开始等待的时候的memtable id
         // We waited so long that the memtable we were originally waiting on was
         // flushed.
         *flush_needed = false;
@@ -1991,8 +1983,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
     return;
   }
   //查看是否需要进行compaction
-  while (bg_compaction_scheduled_ < bg_job_limits.max_compactions &&
-         unscheduled_compactions_ > 0) {
+  while (bg_compaction_scheduled_ < bg_job_limits.max_compactions && unscheduled_compactions_ > 0) {
     CompactionArg* ca = new CompactionArg;
     ca->db = this;
     ca->prepicked_compaction = nullptr;
@@ -2129,10 +2120,8 @@ void DBImpl::BGWorkCompaction(void* arg) {
   delete reinterpret_cast<CompactionArg*>(arg);
   IOSTATS_SET_THREAD_POOL_ID(Env::Priority::LOW);
   TEST_SYNC_POINT("DBImpl::BGWorkCompaction");
-  auto prepicked_compaction =
-      static_cast<PrepickedCompaction*>(ca.prepicked_compaction);
-  static_cast_with_check<DBImpl, DB>(ca.db)->BackgroundCallCompaction(
-      prepicked_compaction, Env::Priority::LOW);
+  auto prepicked_compaction = static_cast<PrepickedCompaction*>(ca.prepicked_compaction);
+  static_cast_with_check<DBImpl, DB>(ca.db)->BackgroundCallCompaction(prepicked_compaction, Env::Priority::LOW);
   delete prepicked_compaction;
 }
 
@@ -2453,25 +2442,22 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                                     LogBuffer* log_buffer,
                                     PrepickedCompaction* prepicked_compaction,
                                     Env::Priority thread_pri) {
-  ManualCompactionState* manual_compaction =
-      prepicked_compaction == nullptr
-          ? nullptr
-          : prepicked_compaction->manual_compaction_state;
+  ManualCompactionState* manual_compaction = prepicked_compaction == nullptr? nullptr: prepicked_compaction->manual_compaction_state;
   *made_progress = false;
   mutex_.AssertHeld();
   TEST_SYNC_POINT("DBImpl::BackgroundCompaction:Start");
 
   bool is_manual = (manual_compaction != nullptr);
   std::unique_ptr<Compaction> c;
-  if (prepicked_compaction != nullptr &&
-      prepicked_compaction->compaction != nullptr) {
+
+  //手动触发的compaction ，才会有prepicked_compaction
+  if (prepicked_compaction != nullptr && prepicked_compaction->compaction != nullptr) {
     c.reset(prepicked_compaction->compaction);
   }
   bool is_prepicked = is_manual || c;
 
   // (manual_compaction->in_progress == false);
-  bool trivial_move_disallowed =
-      is_manual && manual_compaction->disallow_trivial_move;
+  bool trivial_move_disallowed =is_manual && manual_compaction->disallow_trivial_move;
 
   CompactionJobStats compaction_job_stats;
   Status status;
@@ -2512,8 +2498,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 
   std::unique_ptr<TaskLimiterToken> task_token;
 
-  // InternalKey manual_end_storage;
-  // InternalKey* manual_end = &manual_end_storage;
+  // InternalMetaKey manual_end_storage;
+  // InternalMetaKey* manual_end = &manual_end_storage;
   bool sfm_reserved_compact_space = false;
   if (is_manual) {
     ManualCompactionState* m = manual_compaction;
@@ -2529,8 +2515,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                        (m->end ? m->end->DebugString().c_str() : "(end)"));
     } else {
       // First check if we have enough room to do the compaction
-      bool enough_room = EnoughRoomForCompaction(
-          m->cfd, *(c->inputs()), &sfm_reserved_compact_space, log_buffer);
+      bool enough_room = EnoughRoomForCompaction( m->cfd, *(c->inputs()), &sfm_reserved_compact_space, log_buffer);
 
       if (!enough_room) {
         // Then don't do the compaction

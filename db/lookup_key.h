@@ -48,7 +48,7 @@ class LookupKey {
   //    tag      uint64
   //                                    <-- end_
   // The array is a suitable MemTable key.
-  // The suffix starting with "userkey" can be used as an InternalKey.
+  // The suffix starting with "userkey" can be used as an InternalMetaKey.
   const char* start_;
   const char* kstart_;
   const char* end_;

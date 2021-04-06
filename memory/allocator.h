@@ -30,6 +30,7 @@ class Allocator {
   virtual size_t BlockSize() const = 0;
 };
 
+//just 跟踪内存申请，不做真正的内存申请动作，内存申请动作由Allocator操作
 class AllocTracker {
  public:
   explicit AllocTracker(WriteBufferManager* write_buffer_manager);

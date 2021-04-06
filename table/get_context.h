@@ -115,10 +115,10 @@ class GetContext {
   // state) into this GetContext.
   //
   // If the parsed_key matches the user key that we are looking for, sets
-  // matched to true.
+  // matched to true. 如果parsed_key和我们要找的key是匹配的，则设置matched为true
   //
   // Returns True if more keys need to be read (due to merges) or
-  //         False if the complete value has been found.
+  //         False if the complete value has been found. 返回true表示还需要继续读
   bool SaveValue(const ParsedInternalKey& parsed_key, const Slice& value,
                  bool* matched, Cleanable* value_pinner = nullptr);
 
@@ -168,7 +168,7 @@ class GetContext {
 
   GetState state_;
   Slice user_key_;
-  PinnableSlice* pinnable_val_;
+  PinnableSlice* pinnable_val_; //存放结果的地方
   std::string* timestamp_;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
   MergeContext* merge_context_;
@@ -185,6 +185,7 @@ class GetContext {
   // Value is true if it's called as part of DB Get API and false if it's
   // called as part of DB GetMergeOperands API. When it's false merge operators
   // are never merged.
+  //作为Get操作的话，这里是true。。就是把找到的数据给存到pinnable_val_中
   bool do_merge_;
   bool* is_blob_index_;
   // Used for block cache tracing only. A tracing get id uniquely identifies a

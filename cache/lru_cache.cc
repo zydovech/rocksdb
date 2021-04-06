@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-
+#include <iostream>
 #include "util/mutexlock.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -219,31 +219,31 @@ void LRUCacheShard::LRU_Insert(LRUHandle* e) {
   lru_usage_ += total_charge;
 }
 
+//这个里面要保证搞优先级的不能太多
 void LRUCacheShard::MaintainPoolSize() {
-  while (high_pri_pool_usage_ > high_pri_pool_capacity_) {
+  while (high_pri_pool_usage_ > high_pri_pool_capacity_) { //高优先级的用量超过capacity了，则修改为low的
     // Overflow last entry in high-pri pool to low-pri pool.
-    lru_low_pri_ = lru_low_pri_->next;
+    lru_low_pri_ = lru_low_pri_->next; //更改指向，把high的放到low里面
     assert(lru_low_pri_ != &lru_);
     lru_low_pri_->SetInHighPriPool(false);
-    size_t total_charge =
-        lru_low_pri_->CalcTotalCharge(metadata_charge_policy_);
+    size_t total_charge = lru_low_pri_->CalcTotalCharge(metadata_charge_policy_);
     assert(high_pri_pool_usage_ >= total_charge);
-    high_pri_pool_usage_ -= total_charge;
+    high_pri_pool_usage_ -= total_charge; //减去对应的量
   }
 }
 
 void LRUCacheShard::EvictFromLRU(size_t charge,
                                  autovector<LRUHandle*>* deleted) {
   while ((usage_ + charge) > capacity_ && lru_.next != &lru_) {
-    LRUHandle* old = lru_.next;
+    LRUHandle* old = lru_.next; //获取最旧的
     // LRU list contains only elements which can be evicted
     assert(old->InCache() && !old->HasRefs());
-    LRU_Remove(old);
+    LRU_Remove(old); //从链表中删除
     table_.Remove(old->key(), old->hash);
     old->SetInCache(false);
     size_t old_total_charge = old->CalcTotalCharge(metadata_charge_policy_);
     assert(usage_ >= old_total_charge);
-    usage_ -= old_total_charge;
+    usage_ -= old_total_charge; //把使用量减少
     deleted->push_back(old);
   }
 }
@@ -358,9 +358,8 @@ Status LRUCacheShard::Insert(const Slice& key, uint32_t hash, void* value,
   e->next = e->prev = nullptr;
   e->SetInCache(true);
   e->SetPriority(priority);
-  memcpy(e->key_data, key.data(), key.size());
+  memcpy(e->key_data, key.data(), key.size()); //这个地方memcpy了一份，说明cache里面还是独立的吧？
   size_t total_charge = e->CalcTotalCharge(metadata_charge_policy_);
-
   {
     MutexLock l(&mutex_);
 

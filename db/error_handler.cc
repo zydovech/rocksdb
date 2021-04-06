@@ -113,7 +113,7 @@ std::map<std::tuple<BackgroundErrorReason, bool>, Status::Severity>
           Status::Severity::kFatalError},
         {std::make_tuple(BackgroundErrorReason::kWriteCallback, false),
           Status::Severity::kFatalError},
-        // Errors during Memtable update
+        // Errors during Memtable update  在kMemTable的时候，出错了，则直接fatal error
         {std::make_tuple(BackgroundErrorReason::kMemTable, true),
           Status::Severity::kFatalError},
         {std::make_tuple(BackgroundErrorReason::kMemTable, false),

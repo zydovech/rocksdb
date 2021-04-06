@@ -27,7 +27,6 @@ class WriteBufferManager {
   explicit WriteBufferManager(size_t _buffer_size,
                               std::shared_ptr<Cache> cache = {});
   // No copying allowed
-  WriteBufferManager(const WriteBufferManager&) = delete;
   WriteBufferManager& operator=(const WriteBufferManager&) = delete;
 
   ~WriteBufferManager();

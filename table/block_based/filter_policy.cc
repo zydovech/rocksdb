@@ -488,7 +488,7 @@ void BloomFilterPolicy::CreateFilter(const Slice* keys, int n,
   // appropriately constructed BloomFilterPolicy
   assert(mode_ == kDeprecatedBlock);
 
-  // Compute bloom filter size (in both bits and bytes)
+  // Compute bloom filter size (in both bits and bytes) 计算占用内存
   uint32_t bits = static_cast<uint32_t>(n * whole_bits_per_key_);
 
   // For small n, we can see a very high false positive rate.  Fix it

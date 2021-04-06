@@ -161,8 +161,7 @@ bool FullFilterBlockReader::MayMatch(
     BlockCacheLookupContext* lookup_context) const {
   CachableEntry<ParsedFullFilterBlock> filter_block;
 
-  const Status s =
-      GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
+  const Status s = GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
   if (!s.ok()) {
     return true;
   }

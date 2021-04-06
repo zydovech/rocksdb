@@ -152,12 +152,14 @@ class BlockBasedTableIterator : public InternalIteratorBase<TValue> {
   const ReadOptions read_options_;
   const InternalKeyComparator& icomp_;
   UserComparatorWrapper user_comparator_;
+  //
   InternalIteratorBase<IndexValue>* index_iter_;
   PinnedIteratorsManager* pinned_iters_mgr_;
   TBlockIter block_iter_;
 
   // True if block_iter_ is initialized and points to the same block
   // as index iterator.
+  //为true表示，block_iter_有效的
   bool block_iter_points_to_real_block_;
   // See InternalIteratorBase::IsOutOfBound().
   bool is_out_of_bound_ = false;
@@ -238,6 +240,7 @@ void BlockBasedTableIterator<TBlockIter, TValue>::SeekToFirst() {
 template <class TBlockIter, typename TValue>
 void BlockBasedTableIterator<TBlockIter, TValue>::SeekImpl(
     const Slice* target) {
+
   is_out_of_bound_ = false;
   is_at_first_key_from_index_ = false;
   if (target && !CheckPrefixMayMatch(*target, IterDirection::kForward)) {
@@ -259,16 +262,14 @@ void BlockBasedTableIterator<TBlockIter, TValue>::SeekImpl(
       // exclude the equality case. Considering internal keys can
       // improve for the boundary cases, but it would complicate the
       // code.
-      if (user_comparator_.Compare(ExtractUserKey(*target),
-                                   block_iter_.user_key()) > 0 &&
-          user_comparator_.Compare(ExtractUserKey(*target),
-                                   index_iter_->user_key()) < 0) {
+      if (user_comparator_.Compare(ExtractUserKey(*target),block_iter_.user_key()) > 0 &&
+          user_comparator_.Compare(ExtractUserKey(*target),index_iter_->user_key()) < 0) {
         need_seek_index = false;
       }
     }
   }
 
-  if (need_seek_index) {
+  if (need_seek_index) {//如果需要重新进行index seek
     if (target) {
       index_iter_->Seek(*target);
     } else {
@@ -282,8 +283,9 @@ void BlockBasedTableIterator<TBlockIter, TValue>::SeekImpl(
   }
 
   IndexValue v = index_iter_->value();
-  const bool same_block = block_iter_points_to_real_block_ &&
-                          v.handle.offset() == prev_block_offset_;
+
+  //当前要找的key，还在block内
+  const bool same_block = block_iter_points_to_real_block_ && v.handle.offset() == prev_block_offset_;
 
   // TODO(kolmike): Remove the != kBlockCacheTier condition.
   if (!v.first_internal_key.empty() && !same_block &&
@@ -451,6 +453,7 @@ void BlockBasedTableIterator<TBlockIter, TValue>::Prev() {
 
 template <class TBlockIter, typename TValue>
 void BlockBasedTableIterator<TBlockIter, TValue>::InitDataBlock() {
+
   BlockHandle data_block_handle = index_iter_->value().handle;
   if (!block_iter_points_to_real_block_ ||
       data_block_handle.offset() != prev_block_offset_ ||
@@ -578,6 +581,8 @@ void BlockBasedTableIterator<TBlockIter, TValue>::FindBlockForward() {
                *read_options_.iterate_upper_bound, /*a_has_ts=*/false,
                index_iter_->user_key(), /*b_has_ts=*/true) <= 0);
     ResetDataIter();
+
+    //获取下一个index_iter
     index_iter_->Next();
     if (next_block_is_out_of_bound) {
       // The next block is out of bound. No need to read it.

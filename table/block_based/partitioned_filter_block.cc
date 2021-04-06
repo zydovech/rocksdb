@@ -33,8 +33,7 @@ PartitionedFilterBlockBuilder::PartitionedFilterBlockBuilder(
                                                  use_value_delta_encoding),
       p_index_builder_(p_index_builder),
       keys_added_to_partition_(0) {
-  keys_per_partition_ =
-      filter_bits_builder_->CalculateNumEntry(partition_size);
+  keys_per_partition_ =filter_bits_builder_->CalculateNumEntry(partition_size);
 }
 
 PartitionedFilterBlockBuilder::~PartitionedFilterBlockBuilder() {}
@@ -47,6 +46,7 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
     // requesting until it is granted.
     p_index_builder_->RequestPartitionCut();
   }
+  //是否应该起一个新的block
   if (!p_index_builder_->ShouldCutFilterBlock()) {
     return;
   }
@@ -60,17 +60,20 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
   if (add_prefix) {
     FullFilterBlockBuilder::AddPrefix(*next_key);
   }
-
+  //生成一个filter
   Slice filter = filter_bits_builder_->Finish(&filter_gc.back());
+  //index_key
   std::string& index_key = p_index_builder_->GetPartitionKey();
+  //添加到filters里面
   filters.push_back({index_key, filter});
   keys_added_to_partition_ = 0;
   Reset();
 }
 
 void PartitionedFilterBlockBuilder::Add(const Slice& key) {
+	//新增一条数据的时候，就会往data block插入一条数据，index block插入数据，filter里面插入数据
   MaybeCutAFilterBlock(&key);
-  FullFilterBlockBuilder::Add(key);
+  FullFilterBlockBuilder::Add(key); //这个地方往filter builder里面插入数据
 }
 
 void PartitionedFilterBlockBuilder::AddKey(const Slice& key) {
@@ -82,32 +85,36 @@ Slice PartitionedFilterBlockBuilder::Finish(
     const BlockHandle& last_partition_block_handle, Status* status) {
   if (finishing_filters == true) {
     // Record the handle of the last written filter block in the index
+    //获取前面的
     FilterEntry& last_entry = filters.front();
     std::string handle_encoding;
     last_partition_block_handle.EncodeTo(&handle_encoding);
+    //计算差异
     std::string handle_delta_encoding;
-    PutVarsignedint64(
-        &handle_delta_encoding,
-        last_partition_block_handle.size() - last_encoded_handle_.size());
+    //把差异写到handle_delta_encoding中
+    PutVarsignedint64(&handle_delta_encoding,last_partition_block_handle.size() - last_encoded_handle_.size());
     last_encoded_handle_ = last_partition_block_handle;
     const Slice handle_delta_encoding_slice(handle_delta_encoding);
-    index_on_filter_block_builder_.Add(last_entry.key, handle_encoding,
-                                       &handle_delta_encoding_slice);
+    //插入索引数据到block value是对应的block handler
+    index_on_filter_block_builder_.Add(last_entry.key, handle_encoding,&handle_delta_encoding_slice);
     if (!p_index_builder_->seperator_is_key_plus_seq()) {
       index_on_filter_block_builder_without_seq_.Add(
           ExtractUserKey(last_entry.key), handle_encoding,
           &handle_delta_encoding_slice);
     }
+    //弹出当前filter,因为已经处理好了
     filters.pop_front();
   } else {
     MaybeCutAFilterBlock(nullptr);
   }
   // If there is no filter partition left, then return the index on filter
   // partitions
+  //已经没有filter数据了，则说明所有的filter数据都已经写完了，则最后就是把索引数据给返回
   if (UNLIKELY(filters.empty())) {
     *status = Status::OK();
     if (finishing_filters) {
       if (p_index_builder_->seperator_is_key_plus_seq()) {
+      	//index_on_filter_block_builder_里面就是返回的索引数据
         return index_on_filter_block_builder_.Finish();
       } else {
         return index_on_filter_block_builder_without_seq_.Finish();
@@ -119,8 +126,9 @@ Slice PartitionedFilterBlockBuilder::Finish(
   } else {
     // Return the next filter partition in line and set Incomplete() status to
     // indicate we expect more calls to Finish
-    *status = Status::Incomplete();
+    *status = Status::Incomplete(); //设置为incomplete，让上层一直调用
     finishing_filters = true;
+    //获取最前面的
     return filters.front().filter;
   }
 }
@@ -188,11 +196,13 @@ bool PartitionedFilterBlockReader::PrefixMayMatch(
                   &FullFilterBlockReader::PrefixMayMatch);
 }
 
+//这个就是依据filter block的索引，来看对应的key 的filter真实的数据存在哪个block里面
 BlockHandle PartitionedFilterBlockReader::GetFilterPartitionHandle(
     const CachableEntry<Block>& filter_block, const Slice& entry) const {
   IndexBlockIter iter;
   const InternalKeyComparator* const comparator = internal_comparator();
   Statistics* kNullStats = nullptr;
+
   filter_block.GetValue()->NewIndexIterator(
       comparator, comparator->user_comparator(),
       table()->get_rep()->get_global_seqno(BlockType::kFilter), &iter,
@@ -252,7 +262,7 @@ bool PartitionedFilterBlockReader::MayMatch(
     FilterFunction filter_function) const {
 
 	CachableEntry<Block> filter_block;
-
+  //读取filter block的数据，这个就是索引
   Status s =GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
   if (UNLIKELY(!s.ok())) {
     return true;
@@ -327,14 +337,18 @@ void PartitionedFilterBlockReader::CacheDependencies(bool pin) {
       index_key_includes_seq(), index_value_is_full());
   // Index partitions are assumed to be consecuitive. Prefetch them all.
   // Read the first block offset
+  //定位到开头
   biter.SeekToFirst();
   BlockHandle handle = biter.value().handle;
+  //prefetch_off 位于第一个filter block的 开始
   uint64_t prefetch_off = handle.offset();
 
   // Read the last block's offset
   biter.SeekToLast();
   handle = biter.value().handle;
+  //last_off位于最后的位置
   uint64_t last_off = handle.offset() + handle.size() + kBlockTrailerSize;
+  //len的大小
   uint64_t prefetch_len = last_off - prefetch_off;
   std::unique_ptr<FilePrefetchBuffer> prefetch_buffer;
 

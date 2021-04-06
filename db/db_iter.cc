@@ -1117,6 +1117,7 @@ void DBIter::SetSavedKeyToSeekTarget(const Slice& target) {
   saved_key_.Clear();
   saved_key_.SetInternalKey(target, seq, kValueTypeForSeek, timestamp_ub_);
 
+  //看下限
   if (iterate_lower_bound_ != nullptr &&
       user_comparator_.CompareWithoutTimestamp(
           saved_key_.GetUserKey(), /*a_has_ts=*/true, *iterate_lower_bound_,
@@ -1161,6 +1162,7 @@ void DBIter::Seek(const Slice& target) {
     PERF_TIMER_GUARD(seek_internal_seek_time);
 
     SetSavedKeyToSeekTarget(target); //这里先设置一下saved_key_，用于seek
+
     iter_.Seek(saved_key_.GetInternalKey()); //这里可以看出，iter 接收的是internal key
 
     range_del_agg_.InvalidateRangeDelMapPositions();
@@ -1175,7 +1177,7 @@ void DBIter::Seek(const Slice& target) {
   //到这里的时候，inner iterator 已经在target位置处，但是inner iterator是 对inner key进行迭代的，和user key还不一样
   //需要找到有效的user key 。。因为一些user key可能已经删除，不能直接返回
   // Now the inner iterator is placed to the target position. From there,
-  // we need to find out the next key that is visible to the user.
+  // we need to find out the next key that is visible to the user. 找出对用户可见的key
   ClearSavedValue();
   if (prefix_same_as_start_) {
     // The case where the iterator needs to be invalidated if it has exausted

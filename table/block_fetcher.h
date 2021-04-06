@@ -70,7 +70,7 @@ class BlockFetcher {
   static const uint32_t kDefaultStackBufferSize = 5000;
 
   RandomAccessFileReader* file_; //底层文件
-  FilePrefetchBuffer* prefetch_buffer_; //prefetch_buffer
+  FilePrefetchBuffer* prefetch_buffer_; //prefetch_buffer 这个地方正常是不起作用的，非direct_io的情况下，不用
   const Footer& footer_;
   const ReadOptions read_options_;
   const BlockHandle& handle_;
@@ -81,7 +81,7 @@ class BlockFetcher {
   BlockType block_type_;
   const UncompressionDict& uncompression_dict_;
   const PersistentCacheOptions& cache_options_;
-  MemoryAllocator* memory_allocator_;
+  MemoryAllocator* memory_allocator_; //这个地方也是NULL的
   MemoryAllocator* memory_allocator_compressed_;
   Status status_;
   Slice slice_;

@@ -229,6 +229,9 @@ inline CompressionType get_block_compression_type(const char* block_data,
 // it's created, it may or may not own the actual block bytes. As an example,
 // BlockContents objects representing data read from mmapped files only point
 // into the mmapped region.
+/*
+ * 代表的是从sst file里面读取的block 内容。依据如何创建的，可能含有数据，也可能没有，mmap
+ * */
 struct BlockContents {
   Slice data;  // Actual contents of data
   CacheAllocationPtr allocation;
@@ -260,6 +263,7 @@ struct BlockContents {
   // It's the caller's responsibility to make sure that this is
   // for raw block contents, which contains the compression
   // byte in the end.
+  //获取compression类型，每个block的最后一个字节表示压缩类型
   CompressionType get_compression_type() const {
     assert(is_raw_block);
     return get_block_compression_type(data.data(), data.size());

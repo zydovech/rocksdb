@@ -1173,13 +1173,14 @@ struct Options : public DBOptions, public ColumnFamilyOptions {
 // Get call will process data that is already processed in the memtable or
 // the block cache. It will not page in data from the OS cache or data that
 // resides in storage.
+//要从哪些地方读取数据
 enum ReadTier {
   kReadAllTier = 0x0,     // data in memtable, block cache, OS cache or storage
   kBlockCacheTier = 0x1,  // data in memtable or block cache
   kPersistedTier = 0x2,   // persisted data.  When WAL is disabled, this option
                           // will skip data in memtable.
                           // Note that this ReadTier currently only supports
-                          // Get and MultiGet and does not support iterators.
+                          // Get and MultiGet and does not support iterators. 不支持在迭代器里面使用
   kMemtableTier = 0x3     // data in memtable. used for memtable-only iterators.
 };
 

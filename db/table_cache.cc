@@ -46,8 +46,7 @@ static void UnrefEntry(void* arg1, void* arg2) {
 }
 
 static Slice GetSliceForFileNumber(const uint64_t* file_number) {
-  return Slice(reinterpret_cast<const char*>(file_number),
-               sizeof(*file_number));
+  return Slice(reinterpret_cast<const char*>(file_number),sizeof(*file_number));
 }
 
 #ifndef ROCKSDB_LITE
@@ -95,11 +94,11 @@ Status TableCache::GetTableReader(
     std::unique_ptr<TableReader>* table_reader,
     const SliceTransform* prefix_extractor, bool skip_filters, int level,
     bool prefetch_index_and_filter_in_cache) {
-  std::string fname =
-      TableFileName(ioptions_.cf_paths, fd.GetNumber(), fd.GetPathId());
+
+  std::string fname = TableFileName(ioptions_.cf_paths, fd.GetNumber(), fd.GetPathId());
   std::unique_ptr<FSRandomAccessFile> file;
-  Status s = ioptions_.fs->NewRandomAccessFile(fname, file_options, &file,
-                                               nullptr);
+
+  Status s = ioptions_.fs->NewRandomAccessFile(fname, file_options, &file,nullptr);
   RecordTick(ioptions_.statistics, NO_FILE_OPENS);
   if (s.IsPathNotFound()) {
     fname = Rocks2LevelTableFileName(fname);
@@ -119,8 +118,7 @@ Status TableCache::GetTableReader(
             record_read_stats ? ioptions_.statistics : nullptr, SST_READ_MICROS,
             file_read_hist, ioptions_.rate_limiter, ioptions_.listeners));
     //封装，建立TableReader
-    s = ioptions_.table_factory->NewTableReader(
-        TableReaderOptions(ioptions_, prefix_extractor, file_options,
+    s = ioptions_.table_factory->NewTableReader(TableReaderOptions(ioptions_, prefix_extractor, file_options,
                            internal_comparator, skip_filters, immortal_tables_,
                            level, fd.largest_seqno, block_cache_tracer_),
         std::move(file_reader), fd.GetFileSize(), table_reader,
@@ -149,6 +147,7 @@ Status TableCache::FindTable(const FileOptions& file_options,
   Status s;
   uint64_t number = fd.GetNumber();
   Slice key = GetSliceForFileNumber(&number);
+  //先从cache里面查找
   *handle = cache_->Lookup(key);
   TEST_SYNC_POINT_CALLBACK("TableCache::FindTable:0",
                            const_cast<bool*>(&no_io));
@@ -170,8 +169,7 @@ Status TableCache::FindTable(const FileOptions& file_options,
       // or somebody repairs the file, we recover automatically.
     } else {
     	//这里插入到cache里面，charge是1，代表只占一个容量的位置
-      s = cache_->Insert(key, table_reader.get(), 1, &DeleteEntry<TableReader>,
-                         handle);
+      s = cache_->Insert(key, table_reader.get(), 1, &DeleteEntry<TableReader>,handle);
       if (s.ok()) {
         // Release ownership of table reader.
         table_reader.release();
@@ -199,6 +197,7 @@ InternalIterator* TableCache::NewIterator(
   }
   bool for_compaction = caller == TableReaderCaller::kCompaction;
   auto& fd = file_meta.fd;
+
   table_reader = fd.table_reader;
   if (table_reader == nullptr) {//该fd还没有 读取，则进行find_table操作
     s = FindTable(file_options, icomparator, fd, &handle, prefix_extractor,

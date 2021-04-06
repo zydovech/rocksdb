@@ -150,6 +150,7 @@ class MemTable {
 
   // Returns true if a flush should be scheduled and the caller should
   // be the one to schedule it
+  //标记要进行flush了
   bool MarkFlushScheduled() {
     auto before = FLUSH_REQUESTED;
     return flush_state_.compare_exchange_strong(before, FLUSH_SCHEDULED,
@@ -446,6 +447,7 @@ class MemTable {
 #endif  // !ROCKSDB_LITE
 
  private:
+	//三种状态，不需要进行flush  要flush, 已经调度
   enum FlushStateEnum { FLUSH_NOT_REQUESTED, FLUSH_REQUESTED, FLUSH_SCHEDULED };
 
   friend class MemTableIterator;

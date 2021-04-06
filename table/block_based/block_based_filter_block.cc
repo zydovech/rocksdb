@@ -72,6 +72,7 @@ BlockBasedFilterBlockBuilder::BlockBasedFilterBlockBuilder(
   assert(policy_);
 }
 
+//新开一个data block的时候，会有啥动作，对于block based的来说，2k数据生成一个filter
 void BlockBasedFilterBlockBuilder::StartBlock(uint64_t block_offset) {
   uint64_t filter_index = (block_offset / kFilterBase);
   assert(filter_index >= filter_offsets_.size());
@@ -118,22 +119,25 @@ Slice BlockBasedFilterBlockBuilder::Finish(const BlockHandle& /*tmp*/,
                                            Status* status) {
   // In this impl we ignore BlockHandle
   *status = Status::OK();
-  if (!start_.empty()) {
+  if (!start_.empty()) { //如果有剩余的没有那啥，则生成新的filter
     GenerateFilter();
   }
 
   // Append array of per-filter offsets
+  //添加每个filter的索引信息到后面
   const uint32_t array_offset = static_cast<uint32_t>(result_.size());
   for (size_t i = 0; i < filter_offsets_.size(); i++) {
     PutFixed32(&result_, filter_offsets_[i]);
   }
-
+//添加索引开始的位置到内容
   PutFixed32(&result_, array_offset);
+  //添加kFilterBaseLg
   result_.push_back(kFilterBaseLg);  // Save encoding parameter in result
   return Slice(result_);
 }
 
 void BlockBasedFilterBlockBuilder::GenerateFilter() {
+	//计算有多少个entries
   const size_t num_entries = start_.size();
   if (num_entries == 0) {
     // Fast path if there are no keys for this filter
@@ -144,6 +148,7 @@ void BlockBasedFilterBlockBuilder::GenerateFilter() {
   // Make list of keys from flattened key structure
   start_.push_back(entries_.size());  // Simplify length computation
   tmp_entries_.resize(num_entries);
+  //分离不同的key
   for (size_t i = 0; i < num_entries; i++) {
     const char* base = entries_.data() + start_[i];
     size_t length = start_[i + 1] - start_[i];
@@ -216,7 +221,7 @@ bool BlockBasedFilterBlockReader::PrefixMayMatch(
   assert(block_offset != kNotValid);
   return MayMatch(prefix, block_offset, no_io, get_context, lookup_context);
 }
-
+//解析filter block的内容
 bool BlockBasedFilterBlockReader::ParseFieldsFromBlock(
     const BlockContents& contents, const char** data, const char** offset,
     size_t* num, size_t* base_lg) {
@@ -248,7 +253,6 @@ bool BlockBasedFilterBlockReader::MayMatch(
     GetContext* get_context, BlockCacheLookupContext* lookup_context) const {
 
 	CachableEntry<BlockContents> filter_block;
-	std::cout << " xxxxxx " << filter_block.GetValue() << std::endl;
   const Status s = GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
   if (!s.ok()) {
     return true;

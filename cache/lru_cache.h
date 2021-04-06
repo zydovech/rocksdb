@@ -293,10 +293,10 @@ class ALIGN_AS(CACHE_LINE_SIZE) LRUCacheShard final : public CacheShard {
   // ------------vvvvvvvvvvvvv-----------
   LRUHandleTable table_;
 
-  // Memory size for entries residing in the cache
+  // Memory size for entries residing in the cache 所有存放到lru cache里面的数据
   size_t usage_;
 
-  // Memory size for entries residing only in the LRU list
+  // Memory size for entries residing only in the LRU list  真正存在于cache里面的数据
   size_t lru_usage_;
 
   // mutex_ protects the following state.

@@ -149,7 +149,7 @@ class FlushJob {
 
   // Variables below are set by PickMemTable():
   FileMetaData meta_;
-  autovector<MemTable*> mems_;
+  autovector<MemTable*> mems_; //这里应该是所有需要flush的 table
   VersionEdit* edit_;
   Version* base_;
   bool pick_memtable_called;

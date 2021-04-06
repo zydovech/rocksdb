@@ -18,7 +18,7 @@ void FlushScheduler::ScheduleWork(ColumnFamilyData* cfd) {
     assert(checking_set_.count(cfd) == 0);
     checking_set_.insert(cfd);
   }
-#endif  // NDEBUG
+#endif  // NDEBUGd
   cfd->Ref();
 // Suppress false positive clang analyzer warnings.
 #ifndef __clang_analyzer__

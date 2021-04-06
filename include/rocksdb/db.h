@@ -643,7 +643,12 @@ class DB {
 
     //  "rocksdb.compression-ratio-at-level<N>" - returns string containing the
     //      compression ratio of data at level <N>, where <N> is an ASCII
-    //      representation of a level number (e.g., "0"). Here, compression
+    //      representation of a level number (e.g., "0"). Here,rocksdbMemtableSize = prometheus.NewGauge(prometheus.GaugeOpts{
+	//		Namespace: "hedis_cluster",
+	//		Subsystem: "rocksdb",
+	//		Name:      "memtable_size",
+	//	},
+	//	) compression
     //      ratio is defined as uncompressed data size / compressed file size.
     //      Returns "-1.0" if no open files at level <N>.
     static const std::string kCompressionRatioAtLevelPrefix;

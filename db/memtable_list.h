@@ -385,7 +385,7 @@ class MemTableList {
   // DB mutex held
   void InstallNewVersion();
 
-  const int min_write_buffer_number_to_merge_;
+  const int min_write_buffer_number_to_merge_; //表示最小的可以被flush的memtable的个数
 
   MemTableListVersion* current_;
 

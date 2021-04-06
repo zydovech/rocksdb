@@ -1471,7 +1471,7 @@ InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
   if (s.ok()) {
     // Collect iterators for files in L0 - Ln
     //收集L0-LN之间的迭代器
-    if (read_options.read_tier != kMemtableTier) {
+    if (read_options.read_tier != kMemtableTier) {//不是memtable_tier的话，则添加sst file的iterator
       super_version->current->AddIterators(read_options, file_options_,
                                            &merge_iter_builder, range_del_agg);
     }
@@ -1602,8 +1602,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   if (!skip_memtable) {
     // Get value associated with key
     if (get_impl_options.get_value) {
-      if (sv->mem->Get(lkey, get_impl_options.value->GetSelf(), timestamp, &s,
-                       &merge_context, &max_covering_tombstone_seq,
+      if (sv->mem->Get(lkey, get_impl_options.value->GetSelf(), timestamp, &s, &merge_context, &max_covering_tombstone_seq,
                        read_options, get_impl_options.callback,
                        get_impl_options.is_blob_index)) {
         done = true;
@@ -3958,7 +3957,7 @@ Status DBImpl::IngestExternalFiles(
     for (const auto& arg : args) {
       if (arg.column_family == nullptr) {
         return Status::InvalidArgument("column family handle is null");
-      } else if (unique_cfhs.count(arg.column_family) > 0) {
+      } else if (unique_cfhs.count(arg.column_family) > 0) { //一次ingest不能有同样的cf
         return Status::InvalidArgument(
             "ingestion args have duplicate column families");
       }
@@ -4015,8 +4014,7 @@ Status DBImpl::IngestExternalFiles(
   uint64_t start_file_number = next_file_number;
   for (size_t i = 1; i != num_cfs; ++i) {
     start_file_number += args[i - 1].external_files.size();
-    auto* cfd =
-        static_cast<ColumnFamilyHandleImpl*>(args[i].column_family)->cfd();
+    auto* cfd = static_cast<ColumnFamilyHandleImpl*>(args[i].column_family)->cfd();
     SuperVersion* super_version = cfd->GetReferencedSuperVersion(this);
     exec_results[i].second = ingestion_jobs[i].Prepare(
         args[i].external_files, start_file_number, super_version);

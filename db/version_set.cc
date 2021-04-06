@@ -197,7 +197,7 @@ class FilePicker {
           // Key falls out of current file's range
           if (cmp_smallest < 0 || cmp_largest > 0) {
             if (curr_level_ == 0) {
-              ++curr_index_in_curr_level_;
+              ++curr_index_in_curr_level_; //level0的话，则查找当前level的下一个文件
               continue;
             } else {
               // Search next level.
@@ -807,9 +807,7 @@ static bool AfterFile(const Comparator* ucmp,
 static bool BeforeFile(const Comparator* ucmp,
                        const Slice* user_key, const FdWithKeyRange* f) {
   // nullptr user_key occurs after all keys and is therefore never before *f
-  return (user_key != nullptr &&
-          ucmp->CompareWithoutTimestamp(*user_key,
-                                        ExtractUserKey(f->smallest_key)) < 0);
+  return (user_key != nullptr && ucmp->CompareWithoutTimestamp(*user_key, ExtractUserKey(f->smallest_key)) < 0);
 }
 
 /*
@@ -1565,6 +1563,7 @@ void Version::AddIterators(const ReadOptions& read_options,
                            RangeDelAggregator* range_del_agg) {
   assert(storage_info_.finalized_);
 
+  //对所有非空的level，添加迭代器
   for (int level = 0; level < storage_info_.num_non_empty_levels(); level++) {
     AddIteratorsForLevel(read_options, soptions, merge_iter_builder, level,range_del_agg);
   }
@@ -1593,6 +1592,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
     //由于level0 文件之间有重叠，所以每个文件都有一个迭代器
     for (size_t i = 0; i < storage_info_.LevelFilesBrief(0).num_files; i++) {
       const auto& file = storage_info_.LevelFilesBrief(0).files[i];
+
       merge_iter_builder->AddIterator(cfd_->table_cache()->NewIterator(
           read_options, soptions, cfd_->internal_comparator(),
           *file.file_metadata, range_del_agg,
@@ -1617,6 +1617,7 @@ void Version::AddIteratorsForLevel(const ReadOptions& read_options,
     // walks through the non-overlapping files in the level, opening them
     // lazily.
     auto* mem = arena->AllocateAligned(sizeof(LevelIterator));
+
     merge_iter_builder->AddIterator(new (mem) LevelIterator(
         cfd_->table_cache(), read_options, soptions,
         cfd_->internal_comparator(), &storage_info_.LevelFilesBrief(level),
@@ -1819,6 +1820,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
         GetPerfLevel() >= PerfLevel::kEnableTimeExceptForMutex &&
         get_perf_context()->per_level_perf_context_enabled;
     StopWatchNano timer(env_, timer_enabled /* auto_start */);
+    //利用table_cache查找文件
     *status = table_cache_->Get(
         read_options, *internal_comparator(), *f->file_metadata, ikey,
         &get_context, mutable_cf_options_.prefix_extractor.get(),
@@ -2377,6 +2379,7 @@ uint32_t GetExpiredTtlFilesCount(const ImmutableCFOptions& ioptions,
 }
 }  // anonymous namespace
 
+//计算各层的分数
 void VersionStorageInfo::ComputeCompactionScore(
     const ImmutableCFOptions& immutable_cf_options,
     const MutableCFOptions& mutable_cf_options) {
@@ -2430,27 +2433,25 @@ void VersionStorageInfo::ComputeCompactionScore(
         }
 
       } else {
-        score = static_cast<double>(num_sorted_runs) /
-                mutable_cf_options.level0_file_num_compaction_trigger;
+      	//  文件个数 / level0的限制
+        score = static_cast<double>(num_sorted_runs) / mutable_cf_options.level0_file_num_compaction_trigger;
         if (compaction_style_ == kCompactionStyleLevel && num_levels() > 1) {
           // Level-based involves L0->L0 compactions that can lead to oversized
           // L0 files. Take into account size as well to avoid later giant
-          // compactions to the base level.
-          score = std::max(
-              score, static_cast<double>(total_size) /
-                     mutable_cf_options.max_bytes_for_level_base);
+          // compactions to the base level这个是为了避免很大的compaction。。这个怎么避免的？
+          //score越多不回收优先级越高吗
+          score = std::max(score, static_cast<double>(total_size) / mutable_cf_options.max_bytes_for_level_base);
         }
       }
     } else {
-      // Compute the ratio of current size to size limit.
+      // Compute the ratio of current size to size limit. 对于非0level 。。score计算规则，就是所有未压缩的文件/该层的总大小
       uint64_t level_bytes_no_compacting = 0;
       for (auto f : files_[level]) {
         if (!f->being_compacted) {
           level_bytes_no_compacting += f->compensated_file_size;
         }
       }
-      score = static_cast<double>(level_bytes_no_compacting) /
-              MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes_no_compacting) / MaxBytesForLevel(level);
     }
     compaction_level_[level] = level;
     compaction_score_[level] = score;
@@ -2458,6 +2459,7 @@ void VersionStorageInfo::ComputeCompactionScore(
 
   // sort all the levels based on their score. Higher scores get listed
   // first. Use bubble sort because the number of entries are small.
+  //按照分数从大到小进行排序
   for (int i = 0; i < num_levels() - 2; i++) {
     for (int j = i + 1; j < num_levels() - 1; j++) {
       if (compaction_score_[i] < compaction_score_[j]) {
@@ -3242,20 +3244,23 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
       }
     }
   } else {
+  	//保留当前那个level 拥有的最大size
     uint64_t max_level_size = 0;
-
+	//记录第一个不为空的level
     int first_non_empty_level = -1;
     // Find size of non-L0 level of most data.
     // Cannot use the size of the last level because it can be empty or less
     // than previous levels after compaction.
     for (int i = 1; i < num_levels_; i++) {
-      uint64_t total_size = 0;
+      //total_size 记录当前level 的总大小
+    	uint64_t total_size = 0;
       for (const auto& f : files_[i]) {
         total_size += f->fd.GetFileSize();
       }
       if (total_size > 0 && first_non_empty_level == -1) {
         first_non_empty_level = i;
       }
+      //更改max_level_size的值
       if (total_size > max_level_size) {
         max_level_size = total_size;
       }
@@ -3266,7 +3271,7 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
       level_max_bytes_[i] = std::numeric_limits<uint64_t>::max();
     }
 
-    if (max_level_size == 0) {
+    if (max_level_size == 0) {//为0，则代表L1 上面都没有文件呢
       // No data for L1 and up. L0 compacts to last level directly.
       // No compaction from L1+ needs to be scheduled.
       base_level_ = num_levels_ - 1;
@@ -3276,17 +3281,14 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableCFOptions& ioptions,
         l0_size += f->fd.GetFileSize();
       }
 
-      uint64_t base_bytes_max =
-          std::max(options.max_bytes_for_level_base, l0_size);
-      uint64_t base_bytes_min = static_cast<uint64_t>(
-          base_bytes_max / options.max_bytes_for_level_multiplier);
+      uint64_t base_bytes_max =std::max(options.max_bytes_for_level_base, l0_size);
+      uint64_t base_bytes_min = static_cast<uint64_t>( base_bytes_max / options.max_bytes_for_level_multiplier);
 
       // Try whether we can make last level's target size to be max_level_size
       uint64_t cur_level_size = max_level_size;
       for (int i = num_levels_ - 2; i >= first_non_empty_level; i--) {
         // Round up after dividing
-        cur_level_size = static_cast<uint64_t>(
-            cur_level_size / options.max_bytes_for_level_multiplier);
+        cur_level_size = static_cast<uint64_t>( cur_level_size / options.max_bytes_for_level_multiplier);
       }
 
       // Calculate base level and its size.
@@ -4385,9 +4387,11 @@ Status VersionSet::ReadAndRecover(
   //manifest文件也是按照log format保存的，一个record一个record的形式
   while (reader->ReadRecord(&record, &scratch) && s.ok()) {
 
-      VersionEdit edit;
+  	VersionEdit edit;
       //一个record就是一个VersionEdit
     s = edit.DecodeFrom(record);
+	ROCKS_LOG_INFO(db_options_->info_log, "DebugString from edit : %s\n", edit.DebugString(true).c_str());
+
     if (!s.ok()) {
       break;
     }
@@ -4459,8 +4463,7 @@ Status VersionSet::Recover(
     return s;
   }
 
-  ROCKS_LOG_INFO(db_options_->info_log, "Recovering from manifest file: %s\n",
-                 manifest_path.c_str());
+  ROCKS_LOG_INFO(db_options_->info_log, "Recovering from manifest file: %s\n", manifest_path.c_str());
 
   std::unique_ptr<SequentialFileReader> manifest_file_reader;
   {
@@ -4476,8 +4479,7 @@ Status VersionSet::Recover(
                                  db_options_->log_readahead_size));
   }
 
-  std::unordered_map<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>>
-      builders;
+  std::unordered_map<uint32_t, std::unique_ptr<BaseReferencedVersionBuilder>> builders;
 
   // add default column family
   auto default_cf_iter = cf_name_to_options.find(kDefaultColumnFamilyName);
@@ -4487,8 +4489,7 @@ Status VersionSet::Recover(
   VersionEdit default_cf_edit;
   default_cf_edit.AddColumnFamily(kDefaultColumnFamilyName);
   default_cf_edit.SetColumnFamily(0);
-  ColumnFamilyData* default_cfd =
-      CreateColumnFamily(default_cf_iter->second, &default_cf_edit);
+  ColumnFamilyData* default_cfd = CreateColumnFamily(default_cf_iter->second, &default_cf_edit);
   // In recovery, nobody else can access it, so it's fine to set it to be
   // initialized earlier.
   default_cfd->set_initialized();
@@ -4575,7 +4576,7 @@ Status VersionSet::Recover(
       auto builder = builders_iter->second->version_builder();
 
       // unlimited table cache. Pre-load table handle now.
-      // Need to do it out of the mutex.
+      // Need to do it out of the mutex. 预先读取所有的的table
       s = builder->LoadTableHandlers(
           cfd->internal_stats(), db_options_->max_file_opening_threads,
           false /* prefetch_index_and_filter_in_cache */,
@@ -4587,15 +4588,14 @@ Status VersionSet::Recover(
         }
         s = Status::OK();
       }
-
+      //把整个builder里面的内容放到version里面
       Version* v = new Version(cfd, this, file_options_,
                                *cfd->GetLatestMutableCFOptions(),
                                current_version_number_++);
       builder->SaveTo(v->storage_info());
 
       // Install recovered version
-      v->PrepareApply(*cfd->GetLatestMutableCFOptions(),
-          !(db_options_->skip_stats_update_on_db_open));
+      v->PrepareApply(*cfd->GetLatestMutableCFOptions(),!(db_options_->skip_stats_update_on_db_open));
       AppendVersion(cfd, v);
     }
 

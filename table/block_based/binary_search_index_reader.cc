@@ -33,8 +33,7 @@ Status BinarySearchIndexReader::Create(
     }
   }
 
-  index_reader->reset(
-      new BinarySearchIndexReader(table, std::move(index_block)));
+  index_reader->reset( new BinarySearchIndexReader(table, std::move(index_block)));
 
   return Status::OK();
 }

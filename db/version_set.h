@@ -336,7 +336,7 @@ class VersionStorageInfo {
     next_file_to_compact_by_size_[level] = index;
   }
 
-  // REQUIRES: lock is held
+  // REQUIRES: lock is held 下次需要进行compaction的序号
   int NextCompactionIndex(int level) const {
     return next_file_to_compact_by_size_[level];
   }
@@ -456,7 +456,7 @@ class VersionStorageInfo {
 
   // Level that L0 data should be compacted to. All levels < base_level_ should
   // be empty. -1 if it is not level-compaction so it's not applicable.
-  int base_level_;
+  int base_level_; //这个不一定是level1
 
   double level_multiplier_;
 
@@ -464,6 +464,8 @@ class VersionStorageInfo {
   // but files in each level are now sorted based on file
   // size. The file with the largest size is at the front.
   // This vector stores the index of the file from files_.
+  //这个地方存储的是按照文件大小排序的文件位置索引。
+  //外层level，内层才是index
   std::vector<std::vector<int>> files_by_compaction_pri_;
 
   // If true, means that files in L0 have keys with non overlapping ranges
@@ -471,6 +473,7 @@ class VersionStorageInfo {
 
   // An index into files_by_compaction_pri_ that specifies the first
   // file that is not yet compacted
+  //指向的是files_by_compaction_pri_ 中第一个还没有compacted的序号
   std::vector<int> next_file_to_compact_by_size_;
 
   // Only the first few entries of files_by_compaction_pri_ are sorted.
@@ -517,7 +520,7 @@ class VersionStorageInfo {
   // are initialized by Finalize().
   // The most critical level to be compacted is listed first
   // These are used to pick the best compaction level
-  std::vector<double> compaction_score_;
+  std::vector<double> compaction_score_; //保存了每个level的分数
   std::vector<int> compaction_level_;
   int l0_delay_trigger_count_ = 0;  // Count used to trigger slow down and stop
                                     // for number of L0 files.
@@ -1125,7 +1128,7 @@ class VersionSet {
   const std::string dbname_;
   std::string db_id_;
   const ImmutableDBOptions* const db_options_;
-  //下一个文件的数字，wal文件和sst文件都是用的这个。。所以wal和log文件的名字是不重复的？
+  //下一个文件的数字，wal文件和sst文件都是用的这个。。所以wal和sst文件的名字是不重复的？
   std::atomic<uint64_t> next_file_number_;
   // Any log number equal or lower than this should be ignored during recovery,
   // and is qualified for being deleted in 2PC mode. In non-2PC mode, this

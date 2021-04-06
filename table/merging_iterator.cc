@@ -28,7 +28,7 @@
 namespace ROCKSDB_NAMESPACE {
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace {
-	//定义的是最小堆和最大堆。
+//定义的是最小堆和最大堆。 比较器就是MaxIteratorComparator和MinIteratorComparator
 typedef BinaryHeap<IteratorWrapper*, MaxIteratorComparator> MergerMaxIterHeap;
 typedef BinaryHeap<IteratorWrapper*, MinIteratorComparator> MergerMinIterHeap;
 }  // namespace
@@ -47,6 +47,7 @@ class MergingIterator : public InternalIterator {
         minHeap_(comparator_),
         prefix_seek_mode_(prefix_seek_mode),
         pinned_iters_mgr_(nullptr) {
+
     children_.resize(n);
     for (int i = 0; i < n; i++) {
       children_[i].Set(children[i]);
@@ -69,7 +70,9 @@ class MergingIterator : public InternalIterator {
     if (pinned_iters_mgr_) {
       iter->SetPinnedItersMgr(pinned_iters_mgr_);
     }
+
     auto new_wrapper = children_.back();
+    //添加到小堆里面
     AddToMinHeapOrCheckStatus(&new_wrapper);
     if (new_wrapper.Valid()) {
       current_ = CurrentForward();
@@ -85,10 +88,12 @@ class MergingIterator : public InternalIterator {
   bool Valid() const override { return current_ != nullptr && status_.ok(); }
 
   Status status() const override { return status_; }
-
+  //定位到最第一个key
   void SeekToFirst() override {
+  	//清理堆里的数据
     ClearHeaps();
     status_ = Status::OK();
+    //遍历所有的child，让child都定位到第一个，然后添加到堆里
     for (auto& child : children_) {
       child.SeekToFirst();
       AddToMinHeapOrCheckStatus(&child);
@@ -96,7 +101,7 @@ class MergingIterator : public InternalIterator {
     direction_ = kForward;
     current_ = CurrentForward();
   }
-
+  //和first 基本上一样
   void SeekToLast() override {
     ClearHeaps();
     InitMaxHeap();
@@ -113,7 +118,7 @@ class MergingIterator : public InternalIterator {
   	//首先是把当前的堆栈给清理了
     ClearHeaps();
     status_ = Status::OK();
-    for (auto& child : children_) {//遍历所有的children，然后进行seek
+    for (auto& child : children_) {//遍历所有的children，然后进行seek。seek后添加到堆里
       {
         PERF_TIMER_GUARD(seek_child_seek_time);
         child.Seek(target);
@@ -291,7 +296,7 @@ class MergingIterator : public InternalIterator {
   // Cached pointer to child iterator with the current key, or nullptr if no
   // child iterators are valid.  This is the top of minHeap_ or maxHeap_
   // depending on the direction.
-  //指向拥有当前key的迭代器
+  //指向拥有当前key的迭代器，为null的话，则没有可迭代的了
   IteratorWrapper* current_;
   // If any of the children have non-ok status, this is one of them.
   Status status_;
